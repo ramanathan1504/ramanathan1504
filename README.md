@@ -2,7 +2,7 @@
 
 ## 👨‍💻 About Me
 
-I'm a Developer 3 with strong experience in building modern, scalable applications. I enjoy solving challenging problems and am passionate about using technology to create impactful solutions.
+I'm a Developer with experience in building modern, scalable applications. I am passionate about using technology to create impactful solutions.
 
 - 🔥 Skilled in **Java**, **Node.js**, and **React**
 - 🚀 Always eager to learn new technologies and improve my craft

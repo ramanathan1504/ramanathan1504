@@ -1,0 +1,85 @@
+name: Monitor All GitHub Comments Globally
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Check every 10 minutes
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  monitor-comments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Recent Comments Across All Repos
+        run: |
+          # Get comments from the last 15 minutes to avoid duplicates
+          SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          
+          # Get recent events for the user
+          EVENTS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/users/ramanathan1504/events?per_page=100")
+          
+          # Process each IssueCommentEvent
+          echo "$EVENTS" | jq -r '.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'") | 
+            {
+              repo: .repo.full_name,
+              repo_owner: .repo.owner.login,
+              is_fork: .repo.fork,
+              comment_body: .payload.comment.body,
+              issue_url: .payload.issue.html_url,
+              issue_title: .payload.issue.title,
+              created_at: .created_at
+            }' | while IFS= read -r event; do
+            
+            if [ -n "$event" ]; then
+              REPO_OWNER=$(echo "$event" | jq -r '.repo_owner')
+              IS_FORK=$(echo "$event" | jq -r '.is_fork')
+              COMMENT_BODY=$(echo "$event" | jq -r '.comment_body')
+              ISSUE_URL=$(echo "$event" | jq -r '.issue_url')
+              ISSUE_TITLE=$(echo "$event" | jq -r '.issue_title')
+              REPO_NAME=$(echo "$event" | jq -r '.repo')
+              
+              # Skip if it's your own repo or your org repo
+              if [ "$REPO_OWNER" = "ramanathan1504" ] || [ "$REPO_OWNER" = "intemo_dev" ]; then
+                echo "Skipping own/org repo: $REPO_NAME"
+                continue
+              fi
+              
+              # Determine if it's a forked repo or discussion
+              if [ "$IS_FORK" = "true" ]; then
+                # Create contribution task
+                echo "Creating contribution task for forked repo: $REPO_NAME"
+                curl -X POST \
+                  -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+                  -H "Content-Type: application/json" \
+                  --data "{
+                    \"fields\": {
+                      \"project\": { \"key\": \"OT\" },
+                      \"summary\": \"GitHub comment by ramanathan1504 on: $ISSUE_TITLE\",
+                      \"description\": \"Comment on Forked Repo:\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
+                      \"issuetype\": { \"name\": \"Task\" },
+                      \"labels\": [\"github-forked\", \"contribution\"]
+                    }
+                  }" \
+                  https://osscontribution.atlassian.net/rest/api/2/issue
+              else
+                # Create discussion task
+                echo "Creating discussion task for external repo: $REPO_NAME"
+                curl -X POST \
+                  -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+                  -H "Content-Type: application/json" \
+                  --data "{
+                    \"fields\": {
+                      \"project\": { \"key\": \"OT\" },
+                      \"summary\": \"GitHub discussion comment by ramanathan1504 on: $ISSUE_TITLE\",
+                      \"description\": \"Discussion Comment:\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
+                      \"issuetype\": { \"name\": \"Task\" },
+                      \"labels\": [\"github-discussion\", \"external-repo\"]
+                    }
+                  }" \
+                  https://osscontribution.atlassian.net/rest/api/2/issue
+              fi
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_AUTH: ${{ secrets.JIRA_AUTH }}

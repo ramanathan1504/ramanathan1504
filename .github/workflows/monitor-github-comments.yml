@@ -15,7 +15,7 @@ jobs:
           SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           
           # Get recent events for the user
-          EVENTS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          EVENTS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
             "https://api.github.com/users/ramanathan1504/events?per_page=100")
           
           # Process each IssueCommentEvent
@@ -81,5 +81,5 @@ jobs:
             fi
           done
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}

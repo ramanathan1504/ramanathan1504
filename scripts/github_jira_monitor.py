@@ -83,10 +83,45 @@ class GitHubJIRAMonitor:
         return all_events
     
     def filter_comment_events(self, events: List[Dict]) -> List[Dict]:
-        """Filter for IssueCommentEvents"""
-        comment_events = [e for e in events if e.get('type') == 'IssueCommentEvent']
+        """Filter for IssueCommentEvents and PullRequestReviewCommentEvents"""
+        comment_types = ['IssueCommentEvent', 'PullRequestReviewCommentEvent']
+        comment_events = [e for e in events if e.get('type') in comment_types]
         print(f"💬 Comment events found: {len(comment_events)}")
+        
+        # Log breakdown by type
+        issue_comments = len([e for e in comment_events if e.get('type') == 'IssueCommentEvent'])
+        review_comments = len([e for e in comment_events if e.get('type') == 'PullRequestReviewCommentEvent'])
+        print(f"   - Issue/PR comments: {issue_comments}")
+        print(f"   - Review comments: {review_comments}")
+        
         return comment_events
+    
+    def filter_authorship_events(self, events: List[Dict]) -> List[Dict]:
+        """Filter for PullRequestEvent and IssuesEvent where user is the author"""
+        authorship_events = []
+        
+        for event in events:
+            event_type = event.get('type', '')
+            payload = event.get('payload', {})
+            
+            if event_type == 'PullRequestEvent':
+                action = payload.get('action', '')
+                if action == 'opened':  # Only when PR is newly opened
+                    authorship_events.append(event)
+            elif event_type == 'IssuesEvent':
+                action = payload.get('action', '')
+                if action == 'opened':  # Only when issue is newly opened
+                    authorship_events.append(event)
+        
+        print(f"✍️  Authorship events found: {len(authorship_events)}")
+        
+        # Log breakdown by type
+        pr_events = len([e for e in authorship_events if e.get('type') == 'PullRequestEvent'])
+        issue_events = len([e for e in authorship_events if e.get('type') == 'IssuesEvent'])
+        print(f"   - New PRs opened: {pr_events}")
+        print(f"   - New issues opened: {issue_events}")
+        
+        return authorship_events
     
     def should_skip_repo(self, repo_owner: str) -> bool:
         """Check if repo should be skipped"""
@@ -620,9 +655,61 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             print(f"❌ Error processing event: {e}")
             return 'error', False
     
+    def process_authorship_event(self, event: Dict, dry_run: bool = False) -> Tuple[str, bool]:
+        """Process a single authorship event (PR/Issue creation) using enhanced method"""
+        try:
+            event_type = event.get('type', '')
+            payload = event.get('payload', {})
+            repo = event.get('repo', {})
+            
+            # Extract repository information
+            repo_name_raw = repo.get('name', 'unknown')
+            repo_parts = repo_name_raw.split('/')
+            
+            if len(repo_parts) >= 2:
+                repo_owner = repo_parts[0]
+                repo_name = repo_name_raw
+            else:
+                print(f"⚠️  Invalid repository format: {repo_name_raw}")
+                return 'error', False
+            
+            # Skip own repositories
+            if self.should_skip_repo(repo_owner):
+                print(f"⏭️  Skipping own/org repository: {repo_name}")
+                return 'skipped', True
+            
+            # Extract issue/PR information based on event type
+            if event_type == 'PullRequestEvent':
+                item = payload.get('pull_request', {})
+                item_type = 'pull_request'
+            elif event_type == 'IssuesEvent':
+                item = payload.get('issue', {})
+                item_type = 'issue'
+            else:
+                print(f"⚠️  Unsupported authorship event type: {event_type}")
+                return 'error', False
+            
+            issue_number = item.get('number', 0)
+            issue_title = item.get('title', 'No title')
+            
+            print(f"\n--- Processing {item_type.title()} Authorship Event ---")
+            print(f"Repository: {repo_name}")
+            print(f"Number: #{issue_number}")
+            print(f"Title: {issue_title}")
+            
+            # Use the enhanced process_specific_issue method
+            result, success = self.process_specific_issue(repo_name, issue_number, dry_run)
+            
+            print(f"✅ Authorship event processed: {result}")
+            return result, success
+            
+        except Exception as e:
+            print(f"❌ Error processing authorship event: {e}")
+            return 'error', False
+    
     def run_monitor(self, since_minutes: int = 15, dry_run: bool = False) -> Dict:
-        """Run the monitoring workflow (recent comments only)"""
-        print("=== Starting GitHub Comments Monitor ===")
+        """Run the enhanced monitoring workflow (comments + authorship detection)"""
+        print("=== Starting Enhanced GitHub-JIRA Monitor ===")
         print(f"Timestamp: {datetime.now()}")
         print()
         
@@ -635,6 +722,15 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
         print(f"JIRA Auth: {self.jira_auth[:20]}...")
         print()
         
+        print("=== Enhanced Detection Capabilities ===")
+        print("✅ IssueCommentEvent - When you comment on issues/PRs")
+        print("✅ PullRequestReviewCommentEvent - When you add code review comments")
+        print("✅ PullRequestEvent - When you create/open new PRs")
+        print("✅ IssuesEvent - When you create/open new issues")
+        print("✅ Author Detection - Processes PRs/issues you authored (even without comments)")
+        print()
+        print()
+        
         # Calculate since timestamp
         since = (datetime.now() - timedelta(minutes=since_minutes)).isoformat() + 'Z'
         print(f"Looking for comments since: {since}")
@@ -642,16 +738,34 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
         # Fetch events
         events = self.fetch_github_events(since=since, max_pages=1)
         comment_events = self.filter_comment_events(events)
+        authorship_events = self.filter_authorship_events(events)
         
-        if not comment_events:
-            print("No recent comment events found in the specified time range")
+        total_events = len(comment_events) + len(authorship_events)
+        
+        if total_events == 0:
+            print("No recent comment or authorship events found in the specified time range")
             return {'total': 0, 'processed': 0, 'created': 0, 'skipped': 0, 'errors': 0}
         
-        # Process events
-        stats = {'total': len(comment_events), 'processed': 0, 'created': 0, 'skipped': 0, 'errors': 0}
+        print(f"📊 Total events to process: {total_events}")
         
+        # Process events
+        stats = {'total': total_events, 'processed': 0, 'created': 0, 'skipped': 0, 'errors': 0}
+        
+        # Process comment events (existing logic)
         for event in comment_events:
             result, success = self.process_comment_event(event, dry_run)
+            stats['processed'] += 1
+            
+            if result == 'skipped':
+                stats['skipped'] += 1
+            elif result in ['contribution', 'discussion'] and success:
+                stats['created'] += 1
+            else:
+                stats['errors'] += 1
+        
+        # Process authorship events (new logic using enhanced method)
+        for event in authorship_events:
+            result, success = self.process_authorship_event(event, dry_run)
             stats['processed'] += 1
             
             if result == 'skipped':

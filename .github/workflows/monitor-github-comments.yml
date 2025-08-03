@@ -32,10 +32,18 @@ jobs:
           # Get recent events for the user
           echo "Fetching recent GitHub events..."
           EVENTS=$(curl -s -f -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-            "https://api.github.com/users/ramanathan1504/events?per_page=100")
+            "https://api.github.com/users/ramanathan1504/events?per_page=100" 2>/dev/null)
           
-          if [ $? -ne 0 ]; then
+          if [ $? -ne 0 ] || [ -z "$EVENTS" ]; then
             echo "ERROR: Failed to fetch GitHub events"
+            exit 1
+          fi
+          
+          # Validate JSON response
+          echo "$EVENTS" | jq empty 2>/dev/null
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Invalid JSON response from GitHub API"
+            echo "Response preview: $(echo "$EVENTS" | head -c 200)"
             exit 1
           fi
           
@@ -53,36 +61,36 @@ jobs:
           
           # Process each IssueCommentEvent
           echo "Processing IssueCommentEvents..."
-          COMMENT_EVENTS=$(echo "$EVENTS" | jq -r '.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'") | 
-            {
-              repo: .repo.full_name,
-              repo_owner: .repo.owner.login,
-              is_fork: .repo.fork,
-              comment_body: .payload.comment.body,
-              issue_url: .payload.issue.html_url,
-              issue_title: .payload.issue.title,
-              created_at: .created_at
-            }' 2>/dev/null)
+          COMMENT_COUNT=$(echo "$EVENTS" | jq '[.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'")] | length' 2>/dev/null || echo "0")
+          echo "Recent IssueCommentEvents found: $COMMENT_COUNT"
           
-          if [ -z "$COMMENT_EVENTS" ]; then
+          if [ "$COMMENT_COUNT" = "0" ]; then
             echo "No recent comment events found in the specified time range"
             exit 0
           fi
           
           echo "Found comment events to process"
           
-          echo "$COMMENT_EVENTS" | while IFS= read -r event; do
+          # Process each comment event individually to avoid JSON parsing issues
+          echo "$EVENTS" | jq -c '.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'")' 2>/dev/null | while IFS= read -r event; do
             
-            if [ -n "$event" ]; then
+            if [ -n "$event" ] && [ "$event" != "null" ]; then
               echo ""
               echo "--- Processing Comment Event ---"
               
-              REPO_OWNER=$(echo "$event" | jq -r '.repo_owner')
-              IS_FORK=$(echo "$event" | jq -r '.is_fork')
-              COMMENT_BODY=$(echo "$event" | jq -r '.comment_body')
-              ISSUE_URL=$(echo "$event" | jq -r '.issue_url')
-              ISSUE_TITLE=$(echo "$event" | jq -r '.issue_title')
-              REPO_NAME=$(echo "$event" | jq -r '.repo')
+              # Extract individual fields safely
+              REPO_OWNER=$(echo "$event" | jq -r '.repo.owner.login // "unknown"' 2>/dev/null)
+              IS_FORK=$(echo "$event" | jq -r '.repo.fork // false' 2>/dev/null)
+              COMMENT_BODY=$(echo "$event" | jq -r '.payload.comment.body // ""' 2>/dev/null)
+              ISSUE_URL=$(echo "$event" | jq -r '.payload.issue.html_url // ""' 2>/dev/null)
+              ISSUE_TITLE=$(echo "$event" | jq -r '.payload.issue.title // ""' 2>/dev/null)
+              REPO_NAME=$(echo "$event" | jq -r '.repo.full_name // ""' 2>/dev/null)
+              
+              # Skip if we couldn't extract essential data
+              if [ -z "$REPO_OWNER" ] || [ -z "$ISSUE_URL" ] || [ -z "$ISSUE_TITLE" ] || [ "$REPO_OWNER" = "unknown" ]; then
+                echo "⚠️  WARNING: Skipping event with incomplete data"
+                continue
+              fi
               
               echo "Repository: $REPO_NAME"
               echo "Owner: $REPO_OWNER"

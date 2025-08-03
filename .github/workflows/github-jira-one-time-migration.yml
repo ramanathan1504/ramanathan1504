@@ -3,13 +3,13 @@ name: One-Time GitHub JIRA Migration
 # Once migration is complete, this workflow can be archived or moved.
 #
 # MIGRATION CAPABILITIES:
-# - Migrate historical comments using extended lookback periods
-# - Process PRs with extended time windows  
-# - Handle old issues with very large lookback periods
+# - Migrate historical comments from GitHub events
+# - Migrate PRs from specific repositories  
+# - Migrate specific old issues by issue numbers
+# - Check and update released tasks
 #
 # IMPORTANT NOTES:
-# - This uses the same monitoring script with extended --since-minutes parameters
-# - Specific targeting (repos, issue lists) is for documentation - filtering happens in script
+# - Uses specialized migration methods in the script
 # - Always test with dry_run=true first before running actual migration
 # - Large migrations may hit API rate limits - monitor workflow logs
 #
@@ -28,23 +28,24 @@ on:
           - migrate
           - pr-migrate
           - old-issue
-      # Parameters for migration operations
+          - release-check
+      # Parameters for 'migrate' command
       max_pages:
-        description: 'Approx pages to process (converts to hours lookback: 2hrs/page for migrate, 3hrs/page for PR)'
+        description: 'Max pages to process (migrate/pr-migrate only)'
         required: false
         default: '10'
-      # Parameters for PR migration documentation  
+      # Parameters for 'pr-migrate' command  
       target_repos:
-        description: 'Target repos for reference (filtering handled by script logic, e.g., owner/repo1,owner/repo2)'
+        description: 'Comma-separated repos (pr-migrate only, e.g., owner/repo1,owner/repo2)'
         required: false
         default: ''
       limit_per_repo:
-        description: 'Limit per repo for reference (filtering handled by script logic, 0=no limit)'
+        description: 'Limit PRs per repo (pr-migrate only, 0=no limit)'
         required: false
         default: '0'
-      # Parameters for old issue migration documentation
+      # Parameters for 'old-issue' command
       issue_list:
-        description: 'Issues for reference (uses 30-day lookback regardless, e.g., owner/repo#123,owner/repo#456)'
+        description: 'Comma-separated issues (old-issue only, e.g., owner/repo#123,owner/repo#456)'
         required: false
         default: ''
       dry_run:
@@ -102,9 +103,7 @@ jobs:
               exit 1
             fi
             
-            # Use run_monitor with large lookback for historical migration
-            LOOKBACK_HOURS=$((MAX_PAGES * 2))  # Rough estimate: 2 hours per page
-            python github_jira_monitor.py --since-minutes $((LOOKBACK_HOURS * 60)) $DRY_RUN_FLAG
+            python github_jira_monitor.py migrate --max-pages $MAX_PAGES $DRY_RUN_FLAG
             ;;
           "pr-migrate")
             MAX_PAGES="${{ github.event.inputs.max_pages }}"
@@ -128,12 +127,17 @@ jobs:
               exit 1
             fi
             
-            echo "⚠️  Note: PR migration uses standard monitoring with extended lookback"
-            echo "    Target repos and limits are informational - filtering happens in the script"
+            REPO_FLAG=""
+            if [ -n "$TARGET_REPOS" ]; then
+              REPO_FLAG="--repos $TARGET_REPOS"
+            fi
             
-            # Use extended lookback for PR migration
-            LOOKBACK_HOURS=$((MAX_PAGES * 3))  # More hours for PR scanning
-            python github_jira_monitor.py --since-minutes $((LOOKBACK_HOURS * 60)) $DRY_RUN_FLAG
+            LIMIT_FLAG=""
+            if [ "$LIMIT_PER_REPO" != "0" ]; then
+              LIMIT_FLAG="--limit $LIMIT_PER_REPO"
+            fi
+            
+            python github_jira_monitor.py pr-migrate --max-pages $MAX_PAGES $REPO_FLAG $LIMIT_FLAG $DRY_RUN_FLAG
             ;;
           "old-issue")
             ISSUE_LIST="${{ github.event.inputs.issue_list }}"
@@ -155,12 +159,12 @@ jobs:
             echo "📋 Running old issue migration..."
             echo "  Issues: $ISSUE_LIST"
             
-            echo "⚠️  Note: Old issue migration requires manual processing"
-            echo "    This workflow will run with extended lookback to capture historical data"
-            echo "    Specific issue processing: $ISSUE_LIST"
+            python github_jira_monitor.py old-issue --issues "$ISSUE_LIST" $DRY_RUN_FLAG
+            ;;
+          "release-check")
+            echo "🚀 Running release check (Done → Released status updates)..."
             
-            # Use very large lookback for old issues (30 days)
-            python github_jira_monitor.py --since-minutes 43200 $DRY_RUN_FLAG
+            python github_jira_monitor.py release-check $DRY_RUN_FLAG
             ;;
           *)
             echo "❌ Unknown operation: $OPERATION"

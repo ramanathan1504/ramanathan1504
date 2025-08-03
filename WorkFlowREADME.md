@@ -8,10 +8,11 @@ This system provides comprehensive GitHub-JIRA integration with:
 - **Automated monitoring** of recent GitHub comments (cron-based)
 - **Manual migration** workflows for historical data
 - **Targeted processing** of specific issues/PRs
-- **Smart Kanban organization** with workflow-specific behaviors
+- **Smart Kanban organization** with 5-stage workflow: Discussion → Todo → Pull Request → Done → Released
 - **Perfect deduplication** to prevent duplicate tasks
 - **Authorship detection** - creates tasks for authored PRs even without comments
 - **Enhanced content handling** - supports both commented and authored contributions
+- **Release tracking** - automatically moves merged code to "Released" when deployed
 
 ## Quick Start
 
@@ -36,11 +37,12 @@ pip install requests
 
 ### 3. Use GitHub Actions
 
-Four automated workflows available:
-- **Monitor** (cron every 10 minutes)
+Five automated workflows available:
+- **Monitor** (cron every 10 minutes) - tracks comments and new PRs/issues
 - **Migration** (manual, historical comments)
 - **PR Migration** (manual, specific or scan mode)
 - **Specific Issues** (manual, targeted processing)
+- **Release Check** (on release events or manual) - moves Done → Released
 
 ## Workflows
 
@@ -48,6 +50,11 @@ Four automated workflows available:
 - **Trigger**: Automatic (every 10 minutes) or manual
 - **Purpose**: Process recent comments (last 15 minutes)
 - **Kanban**: Merged PRs → "Done", Active PRs → "Pull Request"
+
+### 2. Release Check Workflow
+- **Trigger**: When releases are published or manual
+- **Purpose**: Update merged tasks to "Released" status when code is deployed
+- **Kanban**: Done → Released (for merged code that has been released)
 
 ### 2. Migration Workflow  
 - **Trigger**: Manual only

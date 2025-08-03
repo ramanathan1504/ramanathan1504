@@ -94,10 +94,38 @@ class GitHubJIRAMonitor:
         print(f"   - Issue/PR comments: {issue_comments}")
         print(f"   - Review comments: {review_comments}")
         
-        return comment_events
+        # Also include comments where you are mentioned (even if not by you)
+        mentioned_events = []
+        for event in events:
+            if event.get('type') in comment_types:
+                payload = event.get('payload', {})
+                comment = payload.get('comment', {})
+                comment_body = comment.get('body', '')
+                comment_author = comment.get('user', {}).get('login', '')
+                
+                # Check if you are mentioned in the comment (and it's not your own comment)
+                if f"@{self.github_user}" in comment_body and comment_author != self.github_user:
+                    mentioned_events.append(event)
+                    print(f"   📢 Found mention by {comment_author}")
+        
+        # Combine your comments and mentions
+        all_relevant_events = comment_events + mentioned_events
+        
+        # Remove duplicates (if any)
+        seen_ids = set()
+        unique_events = []
+        for event in all_relevant_events:
+            event_id = event.get('id')
+            if event_id not in seen_ids:
+                seen_ids.add(event_id)
+                unique_events.append(event)
+        
+        print(f"💬 Total relevant comment events (including mentions): {len(unique_events)}")
+        
+        return unique_events
     
     def filter_authorship_events(self, events: List[Dict]) -> List[Dict]:
-        """Filter for PullRequestEvent and IssuesEvent where user is the author"""
+        """Filter for PullRequestEvent, IssuesEvent, and PushEvent where user is the author"""
         authorship_events = []
         
         for event in events:
@@ -112,14 +140,19 @@ class GitHubJIRAMonitor:
                 action = payload.get('action', '')
                 if action == 'opened':  # Only when issue is newly opened
                     authorship_events.append(event)
+            elif event_type == 'PushEvent':
+                # Push events indicate active work - move to "In Progress"
+                authorship_events.append(event)
         
         print(f"✍️  Authorship events found: {len(authorship_events)}")
         
         # Log breakdown by type
         pr_events = len([e for e in authorship_events if e.get('type') == 'PullRequestEvent'])
         issue_events = len([e for e in authorship_events if e.get('type') == 'IssuesEvent'])
+        push_events = len([e for e in authorship_events if e.get('type') == 'PushEvent'])
         print(f"   - New PRs opened: {pr_events}")
         print(f"   - New issues opened: {issue_events}")
+        print(f"   - Push events (new commits): {push_events}")
         
         return authorship_events
     
@@ -228,8 +261,10 @@ class GitHubJIRAMonitor:
                 'status': 'discussion'
             }
     
-    def determine_kanban_status(self, pr_status: Dict, is_fork: bool, repo_owner: str, repo_name: str) -> Tuple[str, List[str]]:
-        """Determine the appropriate Kanban column and labels"""
+    def determine_kanban_status(self, pr_status: Dict, is_fork: bool, repo_owner: str, repo_name: str, event_context: Dict = None) -> Tuple[str, List[str]]:
+        """Determine the appropriate Kanban column and labels
+        Status flow: Discussion → Todo → In Progress → Pull Request → Done → Released
+        """
         # Create labels with owner and repo name (ensure repo_name is just the name, not owner/repo)
         repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
         
@@ -243,15 +278,216 @@ class GitHubJIRAMonitor:
             # External repo - always discussion
             return "Discussion", base_labels + ["external-repo"]
         
+        # Check event context for "In Progress" indicators
+        if event_context:
+            event_type = event_context.get('event_type', '')
+            is_review_comment = event_context.get('is_review_comment', False)
+            is_push_event = event_context.get('is_push_event', False)
+            is_own_issue_comment = event_context.get('is_own_issue_comment', False)
+            
+            # Move to "In Progress" if:
+            # 1. PR review comment (working on feedback)
+            # 2. Push event (new commits)
+            # 3. Comment on own issue/PR (actively working)
+            if is_review_comment or is_push_event or is_own_issue_comment:
+                return "In Progress", base_labels + ["fork-repo", "in-progress"]
+        
         # For forked repos, check PR status
         status = pr_status.get('status', 'discussion')
         
         if status == 'merged':
+            # Check if this is a released version by looking for release tags
+            # For now, merged PRs go to "Done" - "Released" status will be updated separately
+            # when release detection is implemented
             return "Done", base_labels + ["fork-repo", "merged"]
         elif status in ['open', 'closed'] and (pr_status.get('is_pr') or pr_status.get('has_linked_pr')):
             return "Pull Request", base_labels + ["fork-repo", "pull-request"]
         else:
             return "Discussion", base_labels + ["fork-repo"]
+    
+    def check_release_status(self, repo_name: str, pr_number: int = None) -> bool:
+        """Check if merged code has been released by looking for release tags"""
+        try:
+            headers = {
+                'Authorization': f'token {self.github_token}',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            
+            # Get the latest releases for the repository
+            url = f"https://api.github.com/repos/{repo_name}/releases"
+            params = {'per_page': 10}  # Check last 10 releases
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                releases = response.json()
+                
+                if releases:
+                    # Get the latest release
+                    latest_release = releases[0]
+                    release_date = latest_release.get('published_at', '')
+                    release_tag = latest_release.get('tag_name', '')
+                    
+                    print(f"📦 Latest release: {release_tag} published at {release_date}")
+                    
+                    # If we have a specific PR number, we could check if it's included in the release
+                    # For now, we'll consider any merged PR older than the latest release as potentially released
+                    if release_date:
+                        # Convert release date to datetime for comparison
+                        from datetime import datetime
+                        release_datetime = datetime.fromisoformat(release_date.replace('Z', '+00:00'))
+                        
+                        # For simplicity, if there's a release in the last 30 days, 
+                        # we consider merged PRs as potentially released
+                        now = datetime.now(release_datetime.tzinfo)
+                        days_since_release = (now - release_datetime).days
+                        
+                        if days_since_release <= 30:
+                            print(f"🚀 Recent release detected ({days_since_release} days ago)")
+                            return True
+                
+            return False
+            
+        except Exception as e:
+            print(f"⚠️  Error checking release status: {e}")
+            return False
+    
+    def update_released_tasks(self, dry_run: bool = False) -> Dict:
+        """Update merged tasks to Released status if they've been released"""
+        print("🚀 Checking for released tasks...")
+        
+        try:
+            # Search for tasks in "Done" status that might be released
+            headers = {
+                'Authorization': f'Basic {self.jira_auth}',
+                'Content-Type': 'application/json'
+            }
+            
+            # Find all "Done" tasks with "merged" label
+            jql = f'project = "{self.jira_project}" AND status = "Done" AND labels = "merged"'
+            
+            url = f"https://{self.jira_domain}/rest/api/2/search"
+            params = {'jql': jql, 'maxResults': 50}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            stats = {'checked': 0, 'updated': 0, 'errors': 0}
+            
+            if response.status_code == 200:
+                result = response.json()
+                done_tasks = result.get('issues', [])
+                
+                print(f"📊 Found {len(done_tasks)} tasks in Done status")
+                
+                for task in done_tasks:
+                    stats['checked'] += 1
+                    task_key = task['key']
+                    summary = task.get('fields', {}).get('summary', '')
+                    labels = task.get('fields', {}).get('labels', [])
+                    
+                    # Extract repo name from labels
+                    repo_labels = [label for label in labels if label not in ['fork-repo', 'merged', 'pull-request']]
+                    
+                    if len(repo_labels) >= 2:
+                        repo_name = f"{repo_labels[0]}/{repo_labels[1]}"
+                    elif len(repo_labels) == 1:
+                        # Single label might be owner/repo same name
+                        repo_name = f"{repo_labels[0]}/{repo_labels[0]}"
+                    else:
+                        print(f"⚠️  Could not determine repo for task {task_key}")
+                        continue
+                    
+                    print(f"🔍 Checking release status for {task_key}: {summary}")
+                    
+                    # Check if this repo has recent releases
+                    if self.check_release_status(repo_name):
+                        if dry_run:
+                            print(f"🧪 DRY RUN: Would update {task_key} to Released status")
+                            stats['updated'] += 1
+                        else:
+                            # Update to Released status
+                            success = self.update_jira_status(task_key, "Released", dry_run=False)
+                            if success:
+                                print(f"🚀 Updated {task_key} to Released status")
+                                stats['updated'] += 1
+                            else:
+                                print(f"❌ Failed to update {task_key}")
+                                stats['errors'] += 1
+                    else:
+                        print(f"📝 No recent release found for {repo_name}")
+            
+            return stats
+            
+        except Exception as e:
+            print(f"❌ Error updating released tasks: {e}")
+            return {'checked': 0, 'updated': 0, 'errors': 1}
+    
+    def update_tasks_to_in_progress(self, repo_name: str, branch_name: str = None, dry_run: bool = False) -> Tuple[str, bool]:
+        """Update related tasks to In Progress status when push events occur"""
+        try:
+            print(f"🔄 Checking for tasks to move to In Progress for {repo_name}")
+            if branch_name:
+                print(f"   Branch: {branch_name}")
+            
+            headers = {
+                'Authorization': f'Basic {self.jira_auth}',
+                'Content-Type': 'application/json'
+            }
+            
+            # Extract repo parts for search
+            repo_parts = repo_name.split('/')
+            if len(repo_parts) >= 2:
+                repo_owner = repo_parts[0]
+                repo_name_only = repo_parts[1]
+            else:
+                print(f"⚠️  Invalid repo format: {repo_name}")
+                return 'error', False
+            
+            # Search for tasks in Discussion or Pull Request status from this repo
+            jql = f'project = "{self.jira_project}" AND (status = "Discussion" OR status = "Pull Request") AND (labels = "{repo_owner}" OR labels = "{repo_name_only}")'
+            
+            url = f"https://{self.jira_domain}/rest/api/2/search"
+            params = {'jql': jql, 'maxResults': 20}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                result = response.json()
+                tasks = result.get('issues', [])
+                
+                print(f"📊 Found {len(tasks)} potential tasks to update")
+                
+                if tasks:
+                    # For push events, update the most recent task to In Progress
+                    # In a real implementation, you might want to be more specific about which task
+                    task = tasks[0]  # Take the first (most recent) task
+                    task_key = task['key']
+                    summary = task.get('fields', {}).get('summary', '')
+                    
+                    print(f"🔄 Moving {task_key} to In Progress: {summary}")
+                    
+                    if dry_run:
+                        print(f"🧪 DRY RUN: Would update {task_key} to In Progress status")
+                        return 'in_progress', True
+                    else:
+                        # Update to In Progress status
+                        success = self.update_jira_status(task_key, "In Progress", dry_run=False)
+                        if success:
+                            print(f"✅ Updated {task_key} to In Progress status")
+                            return 'in_progress', True
+                        else:
+                            print(f"❌ Failed to update {task_key}")
+                            return 'error', False
+                else:
+                    print(f"📝 No tasks found to update for {repo_name}")
+                    return 'no_tasks', True
+            else:
+                print(f"⚠️  JIRA search failed: {response.status_code}")
+                return 'error', False
+                
+        except Exception as e:
+            print(f"❌ Error updating tasks to In Progress: {e}")
+            return 'error', False
     
     def get_issue_details(self, issue_url: str) -> Dict:
         """Fetch full issue details from GitHub"""
@@ -325,7 +561,7 @@ class GitHubJIRAMonitor:
             print(f"⚠️  Error searching JIRA: {e}")
             return None
     
-    def create_jira_task(self, event_data: Dict, is_fork: bool, dry_run: bool = False) -> bool:
+    def create_jira_task(self, event_data: Dict, is_fork: bool, dry_run: bool = False, kanban_status: str = None, labels: List[str] = None) -> bool:
         """Create or update JIRA task for the comment"""
         try:
             repo_name = event_data['repo_name']
@@ -339,15 +575,16 @@ class GitHubJIRAMonitor:
             issue_details = self.get_issue_details(issue_url)
             issue_body = issue_details.get('body', 'No description available')
             
-            # Check PR status to determine Kanban column
-            repo_name_only = repo_name.split('/')[-1]
-            pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
-            kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only)
+            # Use provided kanban_status and labels, or determine them
+            if kanban_status is None or labels is None:
+                # Check PR status to determine Kanban column
+                repo_name_only = repo_name.split('/')[-1]
+                pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
+                kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only)
             
             # Enhanced status reporting
             print(f"📊 PR Status Analysis:")
             print(f"   Is Fork: {is_fork}")
-            print(f"   PR Status: {pr_status}")
             print(f"   Kanban Column: {kanban_status}")
             print(f"   Labels: {labels}")
             
@@ -356,6 +593,10 @@ class GitHubJIRAMonitor:
                 task_type = "contribution-merged"
                 description_prefix = "✅ MERGED Contribution"
                 print(f"✅ Creating MERGED CONTRIBUTION task for {repo_name}")
+            elif kanban_status == "In Progress":
+                task_type = "contribution-active"
+                description_prefix = "🔄 ACTIVE Work in Progress"
+                print(f"🔄 Creating IN PROGRESS task for {repo_name}")
             elif kanban_status == "Pull Request":
                 task_type = "contribution-pr"
                 description_prefix = "🔄 Active Pull Request"
@@ -577,6 +818,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
         try:
             payload = event.get('payload', {})
             repo = event.get('repo', {})
+            event_type = event.get('type', '')
             
             # Extract repository information from GitHub event
             repo_name_raw = repo.get('name', 'unknown')
@@ -618,11 +860,19 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             issue_title = issue.get('title', 'No title')
             issue_number = issue.get('number', 0)
             
+            # Determine event context for "In Progress" detection
+            is_review_comment = (event_type == 'PullRequestReviewCommentEvent')
+            issue_author = issue.get('user', {}).get('login', '')
+            is_own_issue_comment = (issue_author == self.github_user)
+            
             print(f"\n--- Processing Comment Event ---")
             print(f"Repository: {repo_name}")
             print(f"Owner: {repo_owner}")
             print(f"Issue: {issue_title}")
             print(f"URL: {issue_url}")
+            print(f"Event Type: {event_type}")
+            print(f"Review Comment: {is_review_comment}")
+            print(f"Own Issue Comment: {is_own_issue_comment}")
             print(f"Comment preview: {comment_body[:100]}...")
             
             # Check if should skip (skip own repos and specified orgs)
@@ -638,6 +888,27 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             # Check fork status
             is_fork = self.check_fork_status(repo_name)
             
+            # Check PR status to determine Kanban column
+            repo_name_only = repo_name.split('/')[-1]
+            pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
+            
+            # Create event context for enhanced status determination
+            event_context = {
+                'event_type': event_type,
+                'is_review_comment': is_review_comment,
+                'is_push_event': False,
+                'is_own_issue_comment': is_own_issue_comment
+            }
+            
+            kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only, event_context)
+            
+            # Enhanced status reporting
+            print(f"📊 PR Status Analysis:")
+            print(f"   Is Fork: {is_fork}")
+            print(f"   PR Status: {pr_status}")
+            print(f"   Kanban Column: {kanban_status}")
+            print(f"   Labels: {labels}")
+            
             # Prepare event data
             event_data = {
                 'repo_name': repo_name,
@@ -650,7 +921,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             }
             
             # Create/update JIRA task
-            success = self.create_jira_task(event_data, is_fork, dry_run)
+            success = self.create_jira_task(event_data, is_fork, dry_run, kanban_status, labels)
             
             if success:
                 return 'contribution' if is_fork else 'discussion', True
@@ -662,7 +933,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             return 'error', False
     
     def process_authorship_event(self, event: Dict, dry_run: bool = False) -> Tuple[str, bool]:
-        """Process a single authorship event (PR/Issue creation) using enhanced method"""
+        """Process a single authorship event (PR/Issue creation, Push events) using enhanced method"""
         try:
             event_type = event.get('type', '')
             payload = event.get('payload', {})
@@ -684,8 +955,24 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
                 print(f"⏭️  Skipping own/org repository: {repo_name}")
                 return 'skipped', True
             
-            # Extract issue/PR information based on event type
-            if event_type == 'PullRequestEvent':
+            # Handle different event types
+            if event_type == 'PushEvent':
+                # For push events, find the related PR or create in-progress task
+                branch_ref = payload.get('ref', '')
+                commits = payload.get('commits', [])
+                
+                print(f"\n--- Processing Push Event ---")
+                print(f"Repository: {repo_name}")
+                print(f"Branch: {branch_ref}")
+                print(f"Commits: {len(commits)}")
+                
+                # Try to find related PR for this branch
+                branch_name = branch_ref.replace('refs/heads/', '') if branch_ref.startswith('refs/heads/') else branch_ref
+                
+                # Search for existing tasks that should be moved to "In Progress"
+                return self.update_tasks_to_in_progress(repo_name, branch_name, dry_run)
+                
+            elif event_type == 'PullRequestEvent':
                 item = payload.get('pull_request', {})
                 item_type = 'pull_request'
             elif event_type == 'IssuesEvent':
@@ -730,10 +1017,12 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
         
         print("=== Enhanced Detection Capabilities ===")
         print("✅ IssueCommentEvent - When you comment on issues/PRs")
-        print("✅ PullRequestReviewCommentEvent - When you add code review comments")
+        print("✅ PullRequestReviewCommentEvent - When you add code review comments → In Progress")
         print("✅ PullRequestEvent - When you create/open new PRs")
         print("✅ IssuesEvent - When you create/open new issues")
+        print("✅ PushEvent - When you push commits → In Progress")
         print("✅ Author Detection - Processes PRs/issues you authored (even without comments)")
+        print("✅ Smart Status Flow - Discussion → Todo → In Progress → Pull Request → Done → Released")
         print()
         print()
         
@@ -1448,9 +1737,24 @@ def main():
         
         stats = monitor.run_old_issue_migration(issue_list=issues, dry_run=dry_run)
         
+    elif command == 'release-check':
+        dry_run = False
+        
+        for i, arg in enumerate(sys.argv[2:]):
+            if arg == '--dry-run':
+                dry_run = True
+        
+        print("🚀 Checking for released tasks (Done → Released status)")
+        stats = monitor.update_released_tasks(dry_run=dry_run)
+        
+        print(f"\n=== Release Check Summary ===")
+        print(f"Tasks Checked: {stats['checked']}")
+        print(f"Tasks Updated to Released: {stats['updated']}")
+        print(f"Errors: {stats['errors']}")
+        
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: monitor, migrate, pr-migrate, old-issue")
+        print("Available commands: monitor, migrate, pr-migrate, old-issue, release-check")
         sys.exit(1)
     
     # Exit with error code if there were errors

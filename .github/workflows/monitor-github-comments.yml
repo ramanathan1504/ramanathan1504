@@ -31,11 +31,25 @@ jobs:
           
           # Get recent events for the user
           echo "Fetching recent GitHub events..."
-          EVENTS=$(curl -s -f -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+          HTTP_RESPONSE=$(curl -s -w "HTTPSTATUS:%{http_code}" -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
             "https://api.github.com/users/ramanathan1504/events?per_page=100" 2>/dev/null)
           
-          if [ $? -ne 0 ] || [ -z "$EVENTS" ]; then
-            echo "ERROR: Failed to fetch GitHub events"
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+          EVENTS=$(echo "$HTTP_RESPONSE" | sed 's/HTTPSTATUS:[0-9]*$//')
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ ERROR: GitHub API returned HTTP $HTTP_STATUS"
+            if [ "$HTTP_STATUS" = "403" ]; then
+              echo "Rate limited by GitHub API"
+            fi
+            echo "Response: $(echo "$EVENTS" | head -c 200)"
+            exit 1
+          fi
+          
+          if [ -z "$EVENTS" ]; then
+            echo "❌ ERROR: Empty response from GitHub API"
             exit 1
           fi
           

@@ -49,11 +49,32 @@ jobs:
             
             # Get events from this page
             echo "Fetching GitHub events page $page..."
-            EVENTS=$(curl -s -f -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            HTTP_RESPONSE=$(curl -s -w "HTTPSTATUS:%{http_code}" -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
               "https://api.github.com/users/ramanathan1504/events?per_page=100&page=$page" 2>/dev/null)
             
-            if [ $? -ne 0 ] || [ -z "$EVENTS" ]; then
-              echo "ERROR: Failed to fetch GitHub events for page $page"
+            HTTP_STATUS=$(echo "$HTTP_RESPONSE" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+            EVENTS=$(echo "$HTTP_RESPONSE" | sed 's/HTTPSTATUS:[0-9]*$//')
+            
+            echo "HTTP Status: $HTTP_STATUS"
+            
+            if [ "$HTTP_STATUS" != "200" ]; then
+              if [ "$HTTP_STATUS" = "403" ]; then
+                echo "❌ ERROR: Rate limited by GitHub API (HTTP 403)"
+                echo "Waiting 60 seconds before retrying..."
+                sleep 60
+                continue
+              elif [ "$HTTP_STATUS" = "404" ]; then
+                echo "⚠️  No more pages available (HTTP 404). Stopping pagination."
+                break
+              else
+                echo "❌ ERROR: GitHub API returned HTTP $HTTP_STATUS for page $page"
+                echo "Response: $(echo "$EVENTS" | head -c 200)"
+                break
+              fi
+            fi
+            
+            if [ -z "$EVENTS" ]; then
+              echo "❌ ERROR: Empty response from GitHub API for page $page"
               break
             fi
             
@@ -86,6 +107,12 @@ jobs:
             
             echo "Processing comment events from page $page..."
             
+            # Create temporary files for counters to persist across subshell
+            echo "$TOTAL_PROCESSED" > /tmp/total_processed
+            echo "$TOTAL_CREATED" > /tmp/total_created
+            echo "$TOTAL_SKIPPED" > /tmp/total_skipped
+            echo "$TOTAL_ERRORS" > /tmp/total_errors
+            
             # Process each comment event individually to avoid JSON parsing issues
             echo "$EVENTS" | jq -c '.[] | select(.type == "IssueCommentEvent")' 2>/dev/null | while IFS= read -r event; do
               
@@ -115,12 +142,17 @@ jobs:
                 echo "Date: $CREATED_AT"
                 echo "Comment preview: $(echo "$COMMENT_BODY" | head -c 100)..."
                 
+                # Update counters using temp files
+                TOTAL_PROCESSED=$(cat /tmp/total_processed)
                 TOTAL_PROCESSED=$((TOTAL_PROCESSED + 1))
+                echo "$TOTAL_PROCESSED" > /tmp/total_processed
                 
                 # Skip if it's your own repo or your org repo
                 if [ "$REPO_OWNER" = "ramanathan1504" ] || [ "$REPO_OWNER" = "intemo_dev" ]; then
                   echo "✅ SKIPPED: Own/org repo - $REPO_NAME"
+                  TOTAL_SKIPPED=$(cat /tmp/total_skipped)
                   TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
+                  echo "$TOTAL_SKIPPED" > /tmp/total_skipped
                   continue
                 fi
                 
@@ -152,7 +184,9 @@ jobs:
                 
                 if [ "$DRY_RUN" = "true" ]; then
                   echo "🧪 DRY RUN: Would create $TASK_TYPE JIRA task for: $ISSUE_TITLE"
+                  TOTAL_CREATED=$(cat /tmp/total_created)
                   TOTAL_CREATED=$((TOTAL_CREATED + 1))
+                  echo "$TOTAL_CREATED" > /tmp/total_created
                   continue
                 fi
                 
@@ -166,7 +200,9 @@ jobs:
                 
                 if [ $? -ne 0 ]; then
                   echo "❌ ERROR: Failed to search JIRA for existing tasks"
+                  TOTAL_ERRORS=$(cat /tmp/total_errors)
                   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+                  echo "$TOTAL_ERRORS" > /tmp/total_errors
                   continue
                 fi
                 
@@ -174,7 +210,9 @@ jobs:
                 
                 if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != "null" ]; then
                   echo "⚠️  ALREADY EXISTS: JIRA task already exists: $EXISTING_KEY"
+                  TOTAL_SKIPPED=$(cat /tmp/total_skipped)
                   TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
+                  echo "$TOTAL_SKIPPED" > /tmp/total_skipped
                 else
                   echo "📝 CREATE: Creating new $TASK_TYPE task for historical comment"
                   
@@ -210,11 +248,15 @@ jobs:
                   if [ $? -eq 0 ]; then
                     NEW_KEY=$(echo "$CREATE_RESPONSE" | jq -r '.key // "unknown"')
                     echo "✅ SUCCESS: Created new $TASK_TYPE JIRA task: $NEW_KEY"
+                    TOTAL_CREATED=$(cat /tmp/total_created)
                     TOTAL_CREATED=$((TOTAL_CREATED + 1))
+                    echo "$TOTAL_CREATED" > /tmp/total_created
                   else
                     echo "❌ ERROR: Failed to create JIRA task"
                     echo "Response: $CREATE_RESPONSE"
+                    TOTAL_ERRORS=$(cat /tmp/total_errors)
                     TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+                    echo "$TOTAL_ERRORS" > /tmp/total_errors
                   fi
                 fi
                 
@@ -223,10 +265,20 @@ jobs:
               fi
             done
             
+            # Read back the counters from temp files
+            TOTAL_PROCESSED=$(cat /tmp/total_processed 2>/dev/null || echo "$TOTAL_PROCESSED")
+            TOTAL_CREATED=$(cat /tmp/total_created 2>/dev/null || echo "$TOTAL_CREATED")
+            TOTAL_SKIPPED=$(cat /tmp/total_skipped 2>/dev/null || echo "$TOTAL_SKIPPED")
+            TOTAL_ERRORS=$(cat /tmp/total_errors 2>/dev/null || echo "$TOTAL_ERRORS")
+            
             echo ""
             echo "Completed page $page. Continuing to next page..."
+            echo "Page $page Summary: Processed=$TOTAL_PROCESSED, Created=$TOTAL_CREATED, Skipped=$TOTAL_SKIPPED, Errors=$TOTAL_ERRORS"
             sleep 2  # Delay between pages
           done
+          
+          # Clean up temp files
+          rm -f /tmp/total_processed /tmp/total_created /tmp/total_skipped /tmp/total_errors
           
           echo ""
           echo "=== Migration Summary ==="

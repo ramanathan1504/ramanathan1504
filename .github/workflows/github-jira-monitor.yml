@@ -46,7 +46,7 @@ on:
       since_minutes:
         description: 'Look back this many minutes for events (monitor only)'
         required: false
-        default: '15'
+        default: '20'
       dry_run:
         description: 'Dry run mode (true/false)'
         required: false
@@ -131,10 +131,12 @@ jobs:
           # Scheduled trigger - determine operation based on schedule
           CURRENT_MINUTE=$(date +%M)
           
-          # Every 10 minutes: run monitoring
+          # Every 10 minutes: run monitoring with 20-minute lookback
+          # This ensures no comments are missed even if workflow is delayed
+          # 20 min lookback with 10 min frequency = 10 min overlap for safety
           echo "⏰ Scheduled trigger at minute $CURRENT_MINUTE"
           echo "📊 Running monitoring (every 10 minutes)..."
-          python github_jira_monitor.py monitor --since-minutes 15
+          python github_jira_monitor.py monitor --since-minutes 20
           
           # Every hour (minute 0): also run release check
           if [ "$CURRENT_MINUTE" = "00" ]; then

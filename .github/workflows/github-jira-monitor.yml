@@ -1,0 +1,147 @@
+name: Ongoing GitHub JIRA Monitor
+# This workflow handles ongoing monitoring and lifecycle tracking.
+# For one-time migrations, use the separate github-jira-one-time-migration.yml workflow.
+#
+# ONGOING MONITORING CAPABILITIES:
+# - Comments on issues/PRs (IssueCommentEvent) 
+# - Code review comments (PullRequestReviewCommentEvent)
+# - New PRs you create (PullRequestEvent - opened)
+# - New issues you create (IssuesEvent - opened)
+# - Push events for In Progress status tracking
+# - Author detection for PRs/issues (even without comments)
+# - Mention detection (@ramanathan1504) with smart status assignment
+# - Fork repository detection for intelligent status flow
+#
+# RELEASE TRACKING:
+# - Automatic Done → Released status transitions
+# - Release tag monitoring
+# - Merged PR release detection
+#
+# STATUS FLOW:
+# Discussion → Todo → In Progress → Pull Request → Done → Released
+#
+# Runs automatically on schedule with manual trigger options
+
+on:
+  # Scheduled execution - runs automatically every 10 minutes for monitoring
+  # and every hour for release checking
+  schedule:
+    # Main monitoring: every 10 minutes
+    - cron: '*/10 * * * *'
+    # Release checking: every hour at minute 0
+    - cron: '0 * * * *'
+  
+  # Manual execution - allows running the workflow with custom parameters
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Operation to perform'
+        required: false
+        default: 'monitor'
+        type: choice
+        options:
+          - monitor
+          - release-check
+          - both
+      since_minutes:
+        description: 'Look back this many minutes for events (monitor only)'
+        required: false
+        default: '20'
+      dry_run:
+        description: 'Dry run mode (true/false)'
+        required: false
+        default: 'false'
+
+# Environment variables - these secrets must be configured in GitHub repository settings
+env:
+  # GitHub personal access token for API access
+  # Secret name: GH_TOKEN (configured in repository settings > Secrets and variables > Actions)
+  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+  
+  # JIRA authentication token (base64 encoded username:password or API token)
+  # Secret name: JIRA_AUTH (configured in repository settings > Secrets and variables > Actions)
+  JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+
+jobs:
+  # Main job that runs the comprehensive GitHub-JIRA monitoring and release checking
+  comprehensive_monitor:
+    runs-on: ubuntu-latest
+    steps:
+    # Step 1: Download the repository code to the runner
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    # Step 2: Set up Python environment for running our monitoring script
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    # Step 3: Install required Python packages
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        
+    # Step 4: Execute monitoring operations based on trigger type
+    - name: Run Comprehensive GitHub JIRA Monitor
+      run: |
+        cd scripts
+        
+        # Determine what operations to run based on how workflow was triggered
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual trigger - use user-provided inputs
+          OPERATION="${{ github.event.inputs.operation }}"
+          SINCE_MINUTES="${{ github.event.inputs.since_minutes }}"
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          
+          echo "🎯 Manual trigger: Operation=$OPERATION, Since=$SINCE_MINUTES min, DryRun=$DRY_RUN"
+          
+          # Set dry run flag
+          DRY_RUN_FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+            echo "🧪 Running in DRY RUN mode"
+          fi
+          
+          # Execute based on operation type
+          case "$OPERATION" in
+            "monitor")
+              echo "📊 Running monitoring only..."
+              python github_jira_monitor.py monitor --since-minutes $SINCE_MINUTES $DRY_RUN_FLAG
+              ;;
+            "release-check")
+              echo "🚀 Running release check only..."
+              python github_jira_monitor.py release-check $DRY_RUN_FLAG
+              ;;
+            "both")
+              echo "🔄 Running both monitoring and release check..."
+              python github_jira_monitor.py monitor --since-minutes $SINCE_MINUTES $DRY_RUN_FLAG
+              echo ""
+              echo "🚀 Now checking for releases..."
+              python github_jira_monitor.py release-check $DRY_RUN_FLAG
+              ;;
+            *)
+              echo "❌ Unknown operation: $OPERATION"
+              exit 1
+              ;;
+          esac
+          
+        else
+          # Scheduled trigger - determine operation based on schedule
+          CURRENT_MINUTE=$(date +%M)
+          
+          # Every 10 minutes: run monitoring with 20-minute lookback
+          # This ensures no comments are missed even if workflow is delayed
+          # 20 min lookback with 10 min frequency = 10 min overlap for safety
+          echo "⏰ Scheduled trigger at minute $CURRENT_MINUTE"
+          echo "📊 Running monitoring (every 10 minutes)..."
+          python github_jira_monitor.py monitor --since-minutes 20
+          
+          # Every hour (minute 0): also run release check
+          if [ "$CURRENT_MINUTE" = "00" ]; then
+            echo ""
+            echo "🚀 Hourly release check (minute 00)..."
+            python github_jira_monitor.py release-check
+          fi
+        fi

@@ -33,7 +33,7 @@ on:
         default: '50'
 
 env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
   JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
 
 jobs:

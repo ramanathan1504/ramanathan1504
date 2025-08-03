@@ -162,14 +162,29 @@ jobs:
               else
                 echo "📝 CREATE: No existing task found, creating new $TASK_TYPE task"
                 
+                # Get the issue details to use issue description instead of comment
+                ISSUE_API_URL=$(echo "$ISSUE_URL" | sed 's|github.com|api.github.com/repos|' | sed 's|/issues/|/issues/|')
+                ISSUE_DETAILS=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" "$ISSUE_API_URL" 2>/dev/null)
+                
+                if [ $? -eq 0 ] && [ -n "$ISSUE_DETAILS" ]; then
+                  ISSUE_NUMBER=$(echo "$ISSUE_DETAILS" | jq -r '.number // "unknown"')
+                  ISSUE_BODY=$(echo "$ISSUE_DETAILS" | jq -r '.body // "No description available"')
+                  TASK_SUMMARY="$ISSUE_NUMBER - $ISSUE_TITLE"
+                  TASK_DESCRIPTION="$DESCRIPTION_PREFIX\n\nIssue Description:\n$ISSUE_BODY\n\nMy Comment:\n$COMMENT_BODY\n\nGitHub Issue: $ISSUE_URL\nRepo: $REPO_NAME"
+                else
+                  # Fallback if we can't get issue details
+                  TASK_SUMMARY="GitHub comment by ramanathan1504 on: $ISSUE_TITLE"
+                  TASK_DESCRIPTION="$DESCRIPTION_PREFIX\n$COMMENT_BODY\n\nGitHub Issue: $ISSUE_URL\n\nRepo: $REPO_NAME"
+                fi
+                
                 CREATE_RESPONSE=$(curl -s -X POST \
                   -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
                   -H "Content-Type: application/json" \
                   --data "{
                     \"fields\": {
                       \"project\": { \"key\": \"OT\" },
-                      \"summary\": \"GitHub comment by ramanathan1504 on: $ISSUE_TITLE\",
-                      \"description\": \"$DESCRIPTION_PREFIX\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
+                      \"summary\": \"$TASK_SUMMARY\",
+                      \"description\": \"$TASK_DESCRIPTION\",
                       \"issuetype\": { \"name\": \"Task\" },
                       \"labels\": $LABELS
                     }

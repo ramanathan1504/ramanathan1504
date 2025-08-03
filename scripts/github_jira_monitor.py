@@ -277,20 +277,23 @@ class GitHubJIRAMonitor:
             return {}
     
     def search_existing_jira_task(self, issue_url: str, issue_number: int, repo_name: str) -> Optional[str]:
-        """Search for existing JIRA task with this GitHub issue"""
+        """Search for existing JIRA task with this GitHub issue (repo + issue number)"""
         try:
             headers = {
                 'Authorization': f'Basic {self.jira_auth}',
                 'Content-Type': 'application/json'
             }
             
-            # Search by exact issue number pattern in summary
-            jql = f'project = "{self.jira_project}" AND summary ~ "{issue_number}"'
+            # Extract repo name for more precise matching
+            repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
+            
+            # Search by exact issue number pattern in summary AND repo name in labels
+            jql = f'project = "{self.jira_project}" AND summary ~ "{issue_number}" AND (labels = "{repo_name_only}" OR text ~ "{repo_name_only}")'
             
             url = f"https://{self.jira_domain}/rest/api/2/search"
             params = {'jql': jql, 'maxResults': 20}
             
-            print(f"🔍 Searching for existing task with issue #{issue_number}")
+            print(f"🔍 Searching for existing task with issue #{issue_number} in {repo_name_only}")
             response = requests.get(url, headers=headers, params=params, timeout=10)
             
             if response.status_code == 200:
@@ -301,15 +304,18 @@ class GitHubJIRAMonitor:
                     # Check each result to find exact match
                     for issue in result.get('issues', []):
                         summary = issue.get('fields', {}).get('summary', '')
+                        labels = issue.get('fields', {}).get('labels', [])
                         print(f"   Checking: {summary}")
                         
                         # Look for exact issue number match at start of summary
-                        if summary.startswith(f"{issue_number} -"):
+                        # AND repo name in labels for precise matching
+                        if (summary.startswith(f"{issue_number} -") and 
+                            (repo_name_only in labels or any(repo_name_only in label for label in labels))):
                             issue_key = issue['key']
                             print(f"✅ Found existing JIRA task: {issue_key}")
                             return issue_key
                             
-                print(f"❌ No exact match found for issue #{issue_number}")
+                print(f"❌ No exact match found for issue #{issue_number} in {repo_name_only}")
             else:
                 print(f"⚠️  JIRA search failed: {response.status_code}")
             

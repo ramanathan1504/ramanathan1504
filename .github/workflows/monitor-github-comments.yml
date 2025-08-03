@@ -11,15 +11,49 @@ jobs:
     steps:
       - name: Check Recent Comments Across All Repos
         run: |
+          set -e  # Exit on any error
+          
+          echo "=== Starting GitHub Comments Monitor ==="
+          echo "Timestamp: $(date)"
+          echo ""
+          echo "=== Configuration Details ==="
+          echo "GitHub User: ramanathan1504"
+          echo "Organization to skip: intemo_dev"
+          echo "JIRA Domain: osscontribution.atlassian.net"
+          echo "JIRA Project: OT"
+          echo "GitHub Token: $(echo ${{ secrets.GH_TOKEN }} | head -c 10)..." 
+          echo "JIRA Auth: $(echo ${{ secrets.JIRA_AUTH }} | head -c 20)..."
+          echo ""
+          
           # Get comments from the last 15 minutes to avoid duplicates
           SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "Looking for comments since: $SINCE"
           
           # Get recent events for the user
-          EVENTS=$(curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+          echo "Fetching recent GitHub events..."
+          EVENTS=$(curl -s -f -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
             "https://api.github.com/users/ramanathan1504/events?per_page=100")
           
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to fetch GitHub events"
+            exit 1
+          fi
+          
+          echo "GitHub API response received successfully"
+          
+          # Check if we got valid JSON
+          EVENTS_COUNT=$(echo "$EVENTS" | jq '. | length' 2>/dev/null || echo "0")
+          echo "Total events found: $EVENTS_COUNT"
+          
+          if [ "$EVENTS_COUNT" = "0" ]; then
+            echo "No events found or invalid JSON response"
+            echo "Events response preview: $(echo "$EVENTS" | head -c 200)"
+            exit 0
+          fi
+          
           # Process each IssueCommentEvent
-          echo "$EVENTS" | jq -r '.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'") | 
+          echo "Processing IssueCommentEvents..."
+          COMMENT_EVENTS=$(echo "$EVENTS" | jq -r '.[] | select(.type == "IssueCommentEvent" and .created_at > "'$SINCE'") | 
             {
               repo: .repo.full_name,
               repo_owner: .repo.owner.login,
@@ -28,9 +62,21 @@ jobs:
               issue_url: .payload.issue.html_url,
               issue_title: .payload.issue.title,
               created_at: .created_at
-            }' | while IFS= read -r event; do
+            }' 2>/dev/null)
+          
+          if [ -z "$COMMENT_EVENTS" ]; then
+            echo "No recent comment events found in the specified time range"
+            exit 0
+          fi
+          
+          echo "Found comment events to process"
+          
+          echo "$COMMENT_EVENTS" | while IFS= read -r event; do
             
             if [ -n "$event" ]; then
+              echo ""
+              echo "--- Processing Comment Event ---"
+              
               REPO_OWNER=$(echo "$event" | jq -r '.repo_owner')
               IS_FORK=$(echo "$event" | jq -r '.is_fork')
               COMMENT_BODY=$(echo "$event" | jq -r '.comment_body')
@@ -38,48 +84,112 @@ jobs:
               ISSUE_TITLE=$(echo "$event" | jq -r '.issue_title')
               REPO_NAME=$(echo "$event" | jq -r '.repo')
               
+              echo "Repository: $REPO_NAME"
+              echo "Owner: $REPO_OWNER"
+              echo "Issue: $ISSUE_TITLE"
+              echo "URL: $ISSUE_URL"
+              echo "Comment preview: $(echo "$COMMENT_BODY" | head -c 100)..."
+              
               # Skip if it's your own repo or your org repo
               if [ "$REPO_OWNER" = "ramanathan1504" ] || [ "$REPO_OWNER" = "intemo_dev" ]; then
-                echo "Skipping own/org repo: $REPO_NAME"
+                echo "✅ SKIPPED: Own/org repo - $REPO_NAME"
                 continue
               fi
               
-              # Determine if it's a forked repo or discussion
-              if [ "$IS_FORK" = "true" ]; then
-                # Create contribution task
-                echo "Creating contribution task for forked repo: $REPO_NAME"
-                curl -X POST \
+              echo "✅ EXTERNAL REPO: Processing comment on $REPO_NAME"
+              
+              # Check if I have forked this repo to determine the JIRA task type
+              REPO_NAME_ONLY=$(echo "$REPO_NAME" | cut -d'/' -f2)
+              echo "Checking if I have forked: $REPO_NAME_ONLY"
+              
+              MY_FORK_CHECK=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+                "https://api.github.com/repos/ramanathan1504/$REPO_NAME_ONLY" 2>/dev/null | jq -r '.fork // false')
+              
+              if [ $? -ne 0 ]; then
+                echo "⚠️  WARNING: Could not check fork status, assuming no fork exists"
+                MY_FORK_CHECK="false"
+              fi
+              
+              if [ "$MY_FORK_CHECK" = "true" ]; then
+                TASK_TYPE="contribution"
+                LABELS="[\"github-forked\", \"contribution\"]"
+                DESCRIPTION_PREFIX="Comment on Forked Repo (I have a fork):"
+                echo "🔄 FORK DETECTED: I have forked this repo - treating as CONTRIBUTION"
+              else
+                TASK_TYPE="discussion"
+                LABELS="[\"github-discussion\", \"external-repo\"]"
+                DESCRIPTION_PREFIX="Discussion Comment on External Repo:"
+                echo "💬 NO FORK: Treating as DISCUSSION"
+              fi
+              
+              # Check if JIRA task already exists for this GitHub issue
+              echo "Searching for existing JIRA task..."
+              SEARCH_JQL="project = OT AND summary ~ \"$ISSUE_URL\""
+              EXISTING_ISSUE=$(curl -s -X GET \
+                -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+                -H "Content-Type: application/json" \
+                "https://osscontribution.atlassian.net/rest/api/2/search?jql=$(echo "$SEARCH_JQL" | sed 's/ /%20/g')" 2>/dev/null)
+              
+              if [ $? -ne 0 ]; then
+                echo "❌ ERROR: Failed to search JIRA for existing tasks"
+                continue
+              fi
+              
+              EXISTING_KEY=$(echo "$EXISTING_ISSUE" | jq -r '.issues[0].key // empty' 2>/dev/null)
+              
+              if [ -n "$EXISTING_KEY" ] && [ "$EXISTING_KEY" != "null" ]; then
+                echo "🔄 UPDATE: Found existing JIRA task: $EXISTING_KEY"
+                # Update existing issue with new comment
+                CURRENT_DESC=$(echo "$EXISTING_ISSUE" | jq -r '.issues[0].fields.description // ""')
+                NEW_DESC="$CURRENT_DESC\n\n--- New Comment ($(date)) ---\n$COMMENT_BODY"
+                
+                UPDATE_RESPONSE=$(curl -s -X PUT \
+                  -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+                  -H "Content-Type: application/json" \
+                  --data "{
+                    \"fields\": {
+                      \"description\": \"$NEW_DESC\"
+                    }
+                  }" \
+                  "https://osscontribution.atlassian.net/rest/api/2/issue/$EXISTING_KEY" 2>/dev/null)
+                
+                if [ $? -eq 0 ]; then
+                  echo "✅ SUCCESS: Updated existing JIRA task: $EXISTING_KEY"
+                else
+                  echo "❌ ERROR: Failed to update JIRA task: $EXISTING_KEY"
+                  echo "Response: $UPDATE_RESPONSE"
+                fi
+              else
+                echo "📝 CREATE: No existing task found, creating new $TASK_TYPE task"
+                
+                CREATE_RESPONSE=$(curl -s -X POST \
                   -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
                   -H "Content-Type: application/json" \
                   --data "{
                     \"fields\": {
                       \"project\": { \"key\": \"OT\" },
                       \"summary\": \"GitHub comment by ramanathan1504 on: $ISSUE_TITLE\",
-                      \"description\": \"Comment on Forked Repo:\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
+                      \"description\": \"$DESCRIPTION_PREFIX\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
                       \"issuetype\": { \"name\": \"Task\" },
-                      \"labels\": [\"github-forked\", \"contribution\"]
+                      \"labels\": $LABELS
                     }
                   }" \
-                  https://osscontribution.atlassian.net/rest/api/2/issue
-              else
-                # Create discussion task
-                echo "Creating discussion task for external repo: $REPO_NAME"
-                curl -X POST \
-                  -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
-                  -H "Content-Type: application/json" \
-                  --data "{
-                    \"fields\": {
-                      \"project\": { \"key\": \"OT\" },
-                      \"summary\": \"GitHub discussion comment by ramanathan1504 on: $ISSUE_TITLE\",
-                      \"description\": \"Discussion Comment:\\n$COMMENT_BODY\\n\\nGitHub Issue: $ISSUE_URL\\n\\nRepo: $REPO_NAME\",
-                      \"issuetype\": { \"name\": \"Task\" },
-                      \"labels\": [\"github-discussion\", \"external-repo\"]
-                    }
-                  }" \
-                  https://osscontribution.atlassian.net/rest/api/2/issue
+                  "https://osscontribution.atlassian.net/rest/api/2/issue" 2>/dev/null)
+                
+                if [ $? -eq 0 ]; then
+                  NEW_KEY=$(echo "$CREATE_RESPONSE" | jq -r '.key // "unknown"')
+                  echo "✅ SUCCESS: Created new $TASK_TYPE JIRA task: $NEW_KEY"
+                else
+                  echo "❌ ERROR: Failed to create JIRA task"
+                  echo "Response: $CREATE_RESPONSE"
+                fi
               fi
             fi
           done
+          
+          echo ""
+          echo "=== GitHub Comments Monitor Completed ==="
+          echo "Timestamp: $(date)"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}

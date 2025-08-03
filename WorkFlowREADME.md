@@ -10,6 +10,8 @@ This system provides comprehensive GitHub-JIRA integration with:
 - **Targeted processing** of specific issues/PRs
 - **Smart Kanban organization** with workflow-specific behaviors
 - **Perfect deduplication** to prevent duplicate tasks
+- **Authorship detection** - creates tasks for authored PRs even without comments
+- **Enhanced content handling** - supports both commented and authored contributions
 
 ## Quick Start
 
@@ -62,6 +64,8 @@ Four automated workflows available:
 - **Trigger**: Manual only
 - **Purpose**: Process specific issue/PR numbers
 - **Input**: `owner/repo#123,owner/repo#456`
+- **Smart Detection**: Creates tasks for authored PRs/issues even without comments
+- **Content Handling**: Uses authorship info when no comments exist
 - **Kanban**: PRs → "Pull Request", Issues → appropriate column
 
 ## Kanban Organization
@@ -76,6 +80,23 @@ Four automated workflows available:
 - Repository owner + repo name (e.g., `kubernetes`, `kubernetes`)
 - Status indicators: `merged`, `open`, `closed`, `pull-request`
 - Fork indicators: `fork-repo`, `external-repo`
+
+## Enhanced Processing
+
+### Authorship Detection
+The system now intelligently handles both commented and authored contributions:
+
+- **Comments**: Creates tasks when you comment on issues/PRs
+- **Authorship**: Creates tasks for PRs/issues you authored (even without comments)
+- **Smart Content**: Uses appropriate content based on contribution type:
+  - For comments: Uses your comment text
+  - For authorship: Uses "Authored this PR/issue" with full description
+- **Combined Cases**: When you both authored AND commented, includes both
+
+### Example Scenarios:
+1. **PR #1939**: You authored but never commented → ✅ Creates task with authorship info
+2. **Issue #456**: You commented → ✅ Creates task with comment content  
+3. **PR #789**: You authored AND commented → ✅ Creates task with both authorship + comments
 
 ## Local Testing
 

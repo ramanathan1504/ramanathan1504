@@ -9,6 +9,7 @@ import sys
 import json
 import requests
 import time
+import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import base64
@@ -1025,17 +1026,32 @@ Created Date: {created_at}"""
             
             print(f"Your comments found: {len(user_comments)}")
             
-            if not user_comments:
-                print("❌ No comments found by you on this issue")
+            # Check if user is the author of this issue/PR
+            issue_author = issue_data.get('user', {}).get('login', '')
+            is_author = (issue_author == self.github_user)
+            
+            print(f"Issue/PR author: {issue_author}")
+            print(f"You are the author: {is_author}")
+            
+            if not user_comments and not is_author:
+                print("❌ No comments found by you on this issue and you're not the author")
                 return 'no_comments', False
             
             # Check fork status
             is_fork = self.check_fork_status(f"{repo_owner}/{repo_name}")
             
-            # Use the first comment for JIRA task creation
-            first_comment = user_comments[0]
-            comment_body = first_comment.get('body', 'No comment body')
-            comment_date = first_comment.get('created_at', created_at)
+            # Determine content for JIRA task
+            if user_comments:
+                # Use the first comment for JIRA task creation
+                first_comment = user_comments[0]
+                comment_body = first_comment.get('body', 'No comment body')
+                comment_date = first_comment.get('created_at', created_at)
+                content_type = "comment"
+            else:
+                # User is author but no comments - use PR/issue description
+                comment_body = f"Authored this {'PR' if issue_data.get('pull_request') else 'issue'}"
+                comment_date = created_at
+                content_type = "authorship"
             
             # Check PR status to determine Kanban column
             pr_status = self.check_pr_status(repo_owner, repo_name, issue_number)
@@ -1095,14 +1111,23 @@ Created Date: {created_at}"""
                 if pr_status.get('merged'):
                     pr_info += " - ✅ MERGED"
             
-            # Add all comments if multiple
-            comments_section = f"My Comment:\n{comment_body}"
-            if len(user_comments) > 1:
-                comments_section += f"\n\n--- Additional Comments ({len(user_comments)-1} more) ---"
-                for i, comment in enumerate(user_comments[1:], 2):
-                    comment_date_extra = comment.get('created_at', 'Unknown')
-                    comment_body_extra = comment.get('body', '')
-                    comments_section += f"\n\nComment {i} ({comment_date_extra}):\n{comment_body_extra}"
+            # Add all comments if multiple, or authorship info
+            if content_type == "authorship":
+                comments_section = f"Authored this {'PR' if pr_status.get('is_pr') else 'issue'}:\n{issue_body}"
+                if user_comments:
+                    comments_section += f"\n\n--- My Comments ({len(user_comments)}) ---"
+                    for i, comment in enumerate(user_comments, 1):
+                        comment_date_extra = comment.get('created_at', 'Unknown')
+                        comment_body_extra = comment.get('body', '')
+                        comments_section += f"\n\nComment {i} ({comment_date_extra}):\n{comment_body_extra}"
+            else:
+                comments_section = f"My Comment:\n{comment_body}"
+                if len(user_comments) > 1:
+                    comments_section += f"\n\n--- Additional Comments ({len(user_comments)-1} more) ---"
+                    for i, comment in enumerate(user_comments[1:], 2):
+                        comment_date_extra = comment.get('created_at', 'Unknown')
+                        comment_body_extra = comment.get('body', '')
+                        comments_section += f"\n\nComment {i} ({comment_date_extra}):\n{comment_body_extra}"
             
             task_description = f"""{description_prefix}
 

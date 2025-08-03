@@ -310,8 +310,18 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             payload = event.get('payload', {})
             repo = event.get('repo', {})
             
-            repo_name = repo.get('full_name', 'unknown/unknown')
-            repo_owner = repo.get('owner', {}).get('login', 'unknown')
+            # Better repository name extraction
+            repo_name = repo.get('name', 'unknown')
+            repo_full_name = repo.get('full_name', 'unknown/unknown') 
+            repo_owner = repo.get('owner', {}).get('login') or (repo_full_name.split('/')[0] if '/' in repo_full_name else 'unknown')
+            
+            # Use full name if available, otherwise construct it
+            if repo_full_name and repo_full_name != 'unknown/unknown':
+                repo_name = repo_full_name
+            elif repo_name != 'unknown' and repo_owner != 'unknown':
+                repo_name = f"{repo_owner}/{repo_name}"
+            else:
+                repo_name = repo_full_name
             
             comment = payload.get('comment', {})
             issue = payload.get('issue', {})

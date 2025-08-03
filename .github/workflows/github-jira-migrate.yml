@@ -1,0 +1,46 @@
+name: GitHub JIRA Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: 'Maximum pages to fetch from GitHub Events API'
+        required: false
+        default: '10'
+      dry_run:
+        description: 'Dry run mode (true/false)'
+        required: false
+        default: 'true'
+
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        
+    - name: Run Historical Comments Migration
+      run: |
+        cd scripts
+        MAX_PAGES="${{ github.event.inputs.max_pages }}"
+        DRY_RUN="${{ github.event.inputs.dry_run }}"
+        
+        if [ "$DRY_RUN" = "true" ]; then
+          python github_jira_monitor.py migrate --max-pages $MAX_PAGES --dry-run
+        else
+          python github_jira_monitor.py migrate --max-pages $MAX_PAGES
+        fi

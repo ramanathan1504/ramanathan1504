@@ -337,60 +337,55 @@ class GitHubJIRAMonitor:
         6. BRANCH CREATED → TODO
         7. COMMENT ONLY → DISCUSSION
         """
-        # Create labels with owner and repo name (ensure repo_name is just the name, not owner/repo)
+        # Always use only the repo name as label
         repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
-        
-        # Avoid duplicate labels when owner and repo name are the same
-        if repo_owner == repo_name_only:
-            base_labels = [repo_owner]
-        else:
-            base_labels = [repo_owner, repo_name_only]
-        
+        base_labels = [repo_name_only]
+
         # 1. Highest priority: MERGED → DONE
         if pr_status.get('merged', False) or pr_status.get('status') == 'merged':
             return "Done", base_labels + ["fork-repo", "merged"]
-        
+
         # 2. Check for release status (future implementation)
         # if self.check_release_status(f"{repo_owner}/{repo_name}", pr_status.get('pr_number')):
         #     return "Released", base_labels + ["fork-repo", "released"]
-        
+
         if not is_fork:
             # External repo - always discussion for non-fork repos
             return "Discussion", base_labels + ["external-repo"]
-        
+
         # 3. OPEN PR + ACTIVITY → IN PROGRESS (Backward Flow)
         if event_context:
             has_pr = pr_status.get('is_pr') or pr_status.get('has_linked_pr')
             pr_is_open = pr_status.get('state') == 'open' or pr_status.get('status') == 'open'
-            
+
             if has_pr and pr_is_open:
                 # Check for activity indicators that move back to IN PROGRESS
                 is_review_comment = event_context.get('is_review_comment', False)
                 is_push_to_pr = event_context.get('is_push_to_pr_branch', False)
                 is_mention_on_pr = event_context.get('is_mention_on_open_pr', False)
                 is_comment_on_open_pr = event_context.get('is_comment_on_open_pr', False)
-                
+
                 if is_review_comment or is_push_to_pr or is_mention_on_pr or is_comment_on_open_pr:
                     return "In Progress", base_labels + ["fork-repo", "pr-activity"]
-        
+
         # 4. OPEN PR → PULL REQUEST
         if (pr_status.get('is_pr') or pr_status.get('has_linked_pr')):
             if pr_status.get('state') == 'open' or pr_status.get('status') == 'open':
                 return "Pull Request", base_labels + ["fork-repo", "pull-request"]
-        
+
         # 5. COMMITS ON BRANCH → IN PROGRESS (from PushEvent processing)
         if event_context:
             is_push_event = event_context.get('is_push_event', False)
             is_first_commit = event_context.get('is_first_commit_on_issue_branch', False)
             is_branch_work = event_context.get('is_branch_with_issue_number', False)
-            
+
             if is_push_event and (is_first_commit or is_branch_work):
                 return "In Progress", base_labels + ["fork-repo", "active-work"]
-        
+
         # 6. BRANCH CREATED → TODO (future implementation for branch creation events)
         if event_context and event_context.get('is_branch_created_with_issue', False):
             return "Todo", base_labels + ["fork-repo", "branch-created"]
-        
+
         # 7. COMMENT ONLY → DISCUSSION (default case)
         return "Discussion", base_labels + ["fork-repo"]
     
@@ -678,30 +673,38 @@ class GitHubJIRAMonitor:
     def create_jira_task(self, event_data: Dict, is_fork: bool, dry_run: bool = False, kanban_status: str = None, labels: List[str] = None) -> bool:
         """Create or update JIRA task for the comment"""
         try:
-            repo_name = event_data['repo_name']
-            issue_url = event_data['issue_url']
-            issue_number = event_data['issue_number']
-            issue_title = event_data['issue_title']
-            comment_body = event_data['comment_body']
+            repo_name = event_data.get('repo_name', 'unknown')
+            issue_url = event_data.get('issue_url', '')
+            issue_number = event_data.get('issue_number', 0)
+            issue_title = event_data.get('issue_title', 'No title')
+            comment_body = event_data.get('comment_body', '')
             repo_owner = event_data.get('repo_owner', 'unknown')
-            
+
+            # Defensive: always set repo_name_only
+            if '/' in repo_name:
+                repo_name_only = repo_name.split('/')[-1]
+            else:
+                repo_name_only = repo_name if repo_name else 'unknown-repo'
+
             # Get full issue details
-            issue_details = self.get_issue_details(issue_url)
+            issue_details = self.get_issue_details(issue_url) if issue_url else {}
             issue_body = issue_details.get('body', 'No description available')
-            
+
             # Use provided kanban_status and labels, or determine them
+            pr_status = None
             if kanban_status is None or labels is None:
                 # Check PR status to determine Kanban column
-                repo_name_only = repo_name.split('/')[-1]
                 pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
                 kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only)
-            
+            else:
+                pr_status = {}
+
             # Enhanced status reporting
             print(f"📊 PR Status Analysis:")
             print(f"   Is Fork: {is_fork}")
             print(f"   Kanban Column: {kanban_status}")
             print(f"   Labels: {labels}")
-            
+
             # Determine task type and description
             if kanban_status == "Done":
                 task_type = "contribution-merged"
@@ -723,28 +726,28 @@ class GitHubJIRAMonitor:
                 task_type = "external-discussion"
                 description_prefix = "💬 Discussion on External Repo"
                 print(f"💬 Creating EXTERNAL DISCUSSION task for {repo_name}")
-            
+
             # Check for existing task
             existing_key = self.search_existing_jira_task(issue_url, issue_number, repo_name_only)
-            
+
             if existing_key:
                 print(f"🔄 Updating existing task {existing_key} instead of creating new one")
                 return self.update_jira_task_with_status(existing_key, comment_body, kanban_status, dry_run)
-            
+
             # Create new task
             task_summary = f"{issue_number} - {issue_title}"
-            
+
             # Enhanced description with PR status
             pr_info = ""
-            if pr_status.get('is_pr'):
+            if pr_status and pr_status.get('is_pr'):
                 pr_info = f"\n🔄 This is a Pull Request (#{issue_number}) - Status: {pr_status.get('state', 'unknown')}"
                 if pr_status.get('merged'):
                     pr_info += " - ✅ MERGED"
-            elif pr_status.get('has_linked_pr'):
+            elif pr_status and pr_status.get('has_linked_pr'):
                 pr_info = f"\n🔗 Linked to PR #{pr_status.get('pr_number')} - Status: {pr_status.get('state', 'unknown')}"
                 if pr_status.get('merged'):
                     pr_info += " - ✅ MERGED"
-            
+
             task_description = f"""{description_prefix}
 
 Issue Description:
@@ -758,17 +761,17 @@ GitHub Issue: {issue_url}
 Repo: {repo_name}
 Kanban Status: {kanban_status}
 Original Date: {event_data.get('created_at', 'Unknown')}"""
-            
+
             if dry_run:
                 print(f"🧪 DRY RUN: Would create {task_type} task")
                 print(f"   Summary: {task_summary}")
                 print(f"   Labels: {labels}")
                 print(f"   Kanban Status: {kanban_status}")
                 return True
-            
+
             # Create JIRA task with status
             headers = self.get_jira_headers()
-            
+
             payload = {
                 "fields": {
                     "project": {"key": self.jira_project},
@@ -778,28 +781,28 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
                     "labels": labels
                 }
             }
-            
+
             # Add custom field for Kanban status if your JIRA supports it
             # You might need to adjust this based on your JIRA configuration
             # payload["fields"]["customfield_xxxxx"] = kanban_status  # Replace with actual custom field ID
-            
+
             url = f"https://{self.jira_domain}/rest/api/2/issue"
             response = requests.post(url, headers=headers, json=payload, timeout=30)
-            
+
             if response.status_code in [200, 201]:
                 result = response.json()
                 task_key = result.get('key', 'Unknown')
                 print(f"✅ Created JIRA task: {task_key} (Status: {kanban_status})")
-                
+
                 # Try to move to appropriate status if needed
                 self.update_jira_status(task_key, kanban_status, dry_run=False)
-                
+
                 return True
             else:
                 print(f"❌ Failed to create JIRA task: {response.status_code}")
                 print(f"   Response: {response.text[:200]}")
                 return False
-                
+
         except Exception as e:
             print(f"❌ Error creating JIRA task: {e}")
             return False
@@ -1260,31 +1263,28 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
             # Check fork status
             is_fork = self.check_fork_status(f"{repo_owner}/{repo_name}")
             
-            # For PR migration, always put PRs in Pull Request column (not Done)
+            # Always use only the repo name as label for JIRA
+            repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
             if pr_merged:
                 kanban_status = "Pull Request"
                 task_type = "contribution-pr"
                 description_prefix = "✅ MERGED Pull Request"
-                labels = [repo_owner, repo_name, "fork-repo", "pull-request", "merged"]
+                labels = [repo_name_only, "fork-repo", "pull-request", "merged"]
             elif pr_state == 'closed':
                 kanban_status = "Pull Request"
                 task_type = "contribution-pr"
                 description_prefix = "📝 CLOSED Pull Request"
-                labels = [repo_owner, repo_name, "fork-repo", "pull-request", "closed"]
+                labels = [repo_name_only, "fork-repo", "pull-request", "closed"]
             elif pr_state == 'open':
                 kanban_status = "Pull Request"
                 task_type = "contribution-pr"
                 description_prefix = "🔄 OPEN Pull Request"
-                labels = [repo_owner, repo_name, "fork-repo", "pull-request", "open"]
+                labels = [repo_name_only, "fork-repo", "pull-request", "open"]
             else:
                 kanban_status = "Pull Request"
                 task_type = "contribution-pr"
                 description_prefix = "💭 Pull Request"
-                labels = [repo_owner, repo_name, "fork-repo", "pull-request"]
-            
-            # Avoid duplicate labels when owner and repo name are the same
-            if repo_owner == repo_name:
-                labels = [repo_owner] + [l for l in labels if l not in [repo_owner, repo_name]]
+                labels = [repo_name_only, "fork-repo", "pull-request"]
             
             print(f"📊 PR Analysis:")
             print(f"   Is Fork: {is_fork}")
@@ -1562,26 +1562,23 @@ Created Date: {created_at}"""
             # Check PR status to determine Kanban column
             pr_status = self.check_pr_status(repo_owner, repo_name, issue_number)
             
-            # For old issue migration, always use Pull Request for PRs (don't put in Done)
+            # Always use only the repo name as label for JIRA
+            repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
             if pr_status.get('is_pr') or pr_status.get('has_linked_pr'):
                 # This is a PR or has linked PR - always go to Pull Request column
                 kanban_status = "Pull Request"
                 pr_state = pr_status.get('state', 'unknown')
                 if pr_status.get('merged'):
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "merged"]
+                    labels = [repo_name_only, "fork-repo", "pull-request", "merged"]
                 elif pr_state == 'closed':
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "closed"]
+                    labels = [repo_name_only, "fork-repo", "pull-request", "closed"]
                 elif pr_state == 'open':
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "open"]
+                    labels = [repo_name_only, "fork-repo", "pull-request", "open"]
                 else:
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request"]
+                    labels = [repo_name_only, "fork-repo", "pull-request"]
             else:
                 # Regular issue discussion
                 kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name)
-            
-            # Avoid duplicate labels when owner and repo name are the same
-            if repo_owner == repo_name:
-                labels = [repo_owner] + [l for l in labels if l not in [repo_owner, repo_name]]
             
             print(f"📊 Issue Analysis:")
             print(f"   Is Fork: {is_fork}")

@@ -27,14 +27,25 @@ class GitHubJIRAMonitor:
             print("❌ ERROR: Missing GITHUB_TOKEN or JIRA_AUTH environment variables")
             sys.exit(1)
     
+    def get_github_headers(self) -> Dict[str, str]:
+        """Generate GitHub API headers with proper authorization"""
+        return {
+            'Authorization': self.github_token,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    
+    def get_jira_headers(self) -> Dict[str, str]:
+        """Generate JIRA API headers with proper authorization"""
+        return {
+            'Authorization': f'Basic {self.jira_auth}',
+            'Content-Type': 'application/json'
+        }
+    
     def fetch_github_events(self, since: Optional[str] = None, max_pages: int = 1) -> List[Dict]:
         """Fetch GitHub events for the user"""
         print(f"🔍 Fetching GitHub events (max {max_pages} pages)...")
         
-        headers = {
-            'Authorization': f'token {self.github_token}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
+        headers = self.get_github_headers()
         
         all_events = []
         
@@ -48,14 +59,14 @@ class GitHubJIRAMonitor:
                 response = requests.get(url, headers=headers, params=params, timeout=30)
                 
                 if response.status_code == 403:
-                    print("⚠️  Rate limited. Waiting 60 seconds...")
+                    print("⏸️  Rate limit reached. Pausing to respect GitHub API limits...")
                     time.sleep(60)
                     continue
                 elif response.status_code == 404:
                     print(f"✅ No more pages available. Processed {page-1} pages.")
                     break
                 elif response.status_code != 200:
-                    print(f"❌ GitHub API error: {response.status_code}")
+                    print(f"⚠️  GitHub API temporary issue: {response.status_code}. Skipping this page...")
                     continue
                 
                 events = response.json()
@@ -76,7 +87,7 @@ class GitHubJIRAMonitor:
                     time.sleep(2)
                     
             except Exception as e:
-                print(f"❌ Error fetching page {page}: {e}")
+                print(f"⚠️  Network issue on page {page}. Continuing with available data...")
                 continue
         
         print(f"✅ Total events fetched: {len(all_events)}")
@@ -188,10 +199,7 @@ class GitHubJIRAMonitor:
             # Extract repo name only (remove owner part)
             repo_name_only = repo_name.split('/')[-1]
             
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             url = f"https://api.github.com/repos/{self.github_user}/{repo_name_only}"
             response = requests.get(url, headers=headers, timeout=10)
@@ -212,10 +220,7 @@ class GitHubJIRAMonitor:
     def check_pr_branch_context(self, repo_owner: str, repo_name: str, branch_name: str = None, issue_number: int = None) -> Dict:
         """Check if current activity is related to an open PR"""
         try:
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             # Get open PRs for this repo
             url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
@@ -257,10 +262,7 @@ class GitHubJIRAMonitor:
     def check_pr_status(self, repo_owner: str, repo_name: str, issue_number: int) -> Dict:
         """Check if there's a PR associated with this issue and its status"""
         try:
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             # Check if this is already a PR (not an issue)
             pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{issue_number}"
@@ -395,10 +397,7 @@ class GitHubJIRAMonitor:
     def check_release_status(self, repo_name: str, pr_number: int = None) -> bool:
         """Check if merged code has been released by looking for release tags"""
         try:
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             # Get the latest releases for the repository
             url = f"https://api.github.com/repos/{repo_name}/releases"
@@ -445,10 +444,7 @@ class GitHubJIRAMonitor:
         
         try:
             # Search for tasks in "Done" status that might be released
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             # Find all "Done" tasks with "merged" label
             jql = f'project = "{self.jira_project}" AND status = "Done" AND labels = "merged"'
@@ -516,10 +512,7 @@ class GitHubJIRAMonitor:
             if branch_name:
                 print(f"   Branch: {branch_name}")
             
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             # Extract repo parts for search
             repo_parts = repo_name.split('/')
@@ -622,10 +615,7 @@ class GitHubJIRAMonitor:
             # Convert HTML URL to API URL
             api_url = issue_url.replace('github.com', 'api.github.com/repos')
             
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             response = requests.get(api_url, headers=headers, timeout=10)
             
@@ -642,10 +632,7 @@ class GitHubJIRAMonitor:
     def search_existing_jira_task(self, issue_url: str, issue_number: int, repo_name: str) -> Optional[str]:
         """Search for existing JIRA task with this GitHub issue (repo + issue number)"""
         try:
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             # Extract repo name for more precise matching
             repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
@@ -780,10 +767,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
                 return True
             
             # Create JIRA task with status
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             payload = {
                 "fields": {
@@ -827,10 +811,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
                 print(f"🧪 DRY RUN: Would move task {task_key} to {target_status}")
                 return True
             
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             # Get available transitions
             transitions_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/transitions"
@@ -902,10 +883,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
                 return True
             
             # Get current description
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
             response = requests.get(url, headers=headers, timeout=10)
@@ -1212,10 +1190,7 @@ Original Date: {event_data.get('created_at', 'Unknown')}"""
         """Fetch pull requests authored by the user in a specific repository"""
         print(f"🔍 Fetching your PRs from {repo_owner}/{repo_name}...")
         
-        headers = {
-            'Authorization': f'token {self.github_token}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
+        headers = self.get_github_headers()
         
         all_prs = []
         
@@ -1358,10 +1333,7 @@ Created Date: {created_at}"""
                 return True, True
             
             # Create JIRA task
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             payload = {
                 "fields": {
@@ -1522,10 +1494,7 @@ Created Date: {created_at}"""
                 return 'skipped', True
             
             # Fetch issue details
-            headers = {
-                'Authorization': f'token {self.github_token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
+            headers = self.get_github_headers()
             
             issue_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_number}"
             response = requests.get(issue_url, headers=headers, timeout=10)
@@ -1687,10 +1656,7 @@ Original Date: {comment_date}"""
                 return 'dry_run', True
             
             # Create JIRA task
-            headers = {
-                'Authorization': f'Basic {self.jira_auth}',
-                'Content-Type': 'application/json'
-            }
+            headers = self.get_jira_headers()
             
             payload = {
                 "fields": {

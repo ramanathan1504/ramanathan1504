@@ -754,7 +754,23 @@ Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
         existing_key = self.search_existing_jira_task(issue_url, issue_num, repo_name, repo_owner)
         if existing_key:
             print(f"    🔄 Task already exists: {existing_key}")
-            return 'existing'
+            
+            # Update existing task status to ensure it's correct
+            status_mapping = {
+                'DISCUSSION': 'Discussion',   # Comment activity only = Discussion status
+                'DONE': 'Done',              # Merged PRs = Done (completed work)
+                'BUILD BROKEN': 'Build BRoken'      # Closed non-merged PRs = Build BRoken (failed builds)
+            }
+            jira_status = status_mapping.get(final_status, 'Discussion')
+            
+            print(f"    🔄 Updating existing task status: {final_status} → {jira_status}")
+            status_updated = self.update_jira_status(existing_key, jira_status, dry_run=False)
+            if status_updated:
+                print(f"    ✅ Updated task status: {existing_key} → {jira_status}")
+                return 'updated'
+            else:
+                print(f"    ⚠️  Failed to update task status: {existing_key}")
+                return 'existing'
         
         # Determine task type and description prefix
         if pr_info.get('is_pr_itself'):
@@ -860,9 +876,23 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
                     print(f"    🔗 Attaching task to Epic: {epic_to_attach}")
                     epic_attached = self._attach_epic_post_creation(task_key, epic_to_attach, repo_owner)
                     epic_status = "✅ Epic attached" if epic_attached else "⚠️  Epic attachment failed"
-                    print(f"    ✅ Created task: {task_key} (Status: {final_status}, Epic: {epic_to_attach}, {epic_status})")
                 else:
-                    print(f"    ✅ Created task: {task_key} (Status: {final_status}, Epic: {epic_to_attach or '[none]'})")
+                    epic_status = "No Epic"
+                
+                # Map internal status to JIRA status names
+                status_mapping = {
+                    'DISCUSSION': 'Discussion',   # Comment activity only = Discussion status
+                    'DONE': 'Done',              # Merged PRs = Done (completed work)
+                    'BUILD BROKEN': 'Build BRoken'      # Closed non-merged PRs = Build BRoken (failed builds)
+                }
+                jira_status = status_mapping.get(final_status, 'Discussion')
+                
+                # Transition task to correct status
+                print(f"    🔄 Transitioning task to status: {final_status} → {jira_status}")
+                status_updated = self.update_jira_status(task_key, jira_status, dry_run=False)
+                status_result = "✅ Status updated" if status_updated else "⚠️  Status transition failed"
+                
+                print(f"    ✅ Created task: {task_key} (Status: {final_status}, Epic: {epic_to_attach or '[none]'}, {epic_status}, {status_result})")
                 
                 return 'created'
             else:
@@ -2477,8 +2507,8 @@ Created Date: {created_at}"""
                 "description": task_description,
                 "issuetype": {"name": "Task"},
                 "labels": labels
+            }
         }
-    }
 
         url = f"https://{self.jira_domain}/rest/api/2/issue"
         response = requests.post(url, headers=headers, json=payload, timeout=30)
@@ -2491,46 +2521,6 @@ Created Date: {created_at}"""
         else:
             print(f"❌ Failed to create JIRA task: {response.status_code}")
             return 'error', False
-            task_summary = f"{pr_number} - {pr_title}"
-            task_description = f"{description_prefix}\n\nPull Request Description:\n{pr_body}\n\nGitHub PR: {pr_url}\nRepo: {repo_owner}/{repo_name}\nKanban Status: {kanban_status}\nCreated Date: {created_at}"
-            if dry_run:
-                print(f"🧪 DRY RUN: Would create PR JIRA task for {repo_name_only} with Epic {epic_key if epic_key else '[none]'}")
-                return 'created', True
-            headers = self.get_jira_headers()
-            payload = {
-                "fields": {
-                    "project": {"key": self.jira_project},
-                    "summary": task_summary,
-                    "description": task_description,
-                    "issuetype": {"name": "Task"},
-                    "labels": labels
-                }
-            }
-            if epic_key:
-                payload["fields"]["customfield_10008"] = epic_key
-            url = f"https://{self.jira_domain}/rest/api/2/issue"
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            if response.status_code in [200, 201]:
-                result = response.json()
-                task_key = result.get('key', 'Unknown')
-                print(f"✅ Created JIRA PR task: {task_key} (Epic: {epic_key if epic_key else '[none]'})")
-                return 'created', True
-            else:
-                print(f"❌ Failed to create JIRA PR task: {response.status_code} {response.text}")
-                return 'error', False
-                if i < len(prs):
-                    time.sleep(1)
-        
-        print("\\n=== PR Migration Summary ===")
-        print(f"Total PRs Found: {stats['total']}")
-        print(f"PRs Processed: {stats['processed']}")
-        print(f"JIRA Tasks Created: {stats['created']}")
-        print(f"Existing Tasks Found: {stats['existing']}")
-        print(f"Skipped (own repos): {stats['skipped']}")
-        print(f"Errors: {stats['errors']}")
-        print(f"Timestamp: {datetime.now()}")
-        
-        return stats
     
     def run_migration(self, max_pages: int = 10, dry_run: bool = False, repos: str = None) -> Dict:
         """Run the migration workflow (all historical comments or for specific repos)"""

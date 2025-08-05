@@ -25,15 +25,21 @@ on:
         required: true
         type: choice
         options:
+          - core
           - migrate
           - pr-migrate
           - old-issue
           - release-check
-      # Parameters for 'migrate' command
+      # Parameters for 'core' and 'migrate' command
       max_pages:
-        description: 'Max pages to process (migrate/pr-migrate only)'
+        description: 'Max pages to process (core/migrate/pr-migrate only)'
         required: false
         default: '10'
+      # Parameters for 'core' command
+      since_minutes:
+        description: 'Look back this many minutes (core only)'
+        required: false
+        default: '0'
       # Parameters for 'pr-migrate' command  
       target_repos:
         description: 'Comma-separated repos (pr-migrate only, e.g., owner/repo1,owner/repo2)'
@@ -93,6 +99,25 @@ jobs:
         
         # Execute based on operation type
         case "$OPERATION" in
+          "core")
+            MAX_PAGES="${{ github.event.inputs.max_pages }}"
+            SINCE_MINUTES="${{ github.event.inputs.since_minutes }}"
+            echo "🚀 Running core workflow migration (max $MAX_PAGES pages)..."
+            
+            # Validate max_pages parameter
+            if ! [[ "$MAX_PAGES" =~ ^[0-9]+$ ]] || [ "$MAX_PAGES" -eq 0 ]; then
+              echo "❌ Error: max_pages must be a positive integer, got: $MAX_PAGES"
+              exit 1
+            fi
+            
+            SINCE_FLAG=""
+            if [ "$SINCE_MINUTES" != "0" ] && [ -n "$SINCE_MINUTES" ]; then
+              SINCE_FLAG="--since $SINCE_MINUTES"
+              echo "  Looking back: $SINCE_MINUTES minutes"
+            fi
+            
+            python github_jira_monitor.py core --max-pages $MAX_PAGES $SINCE_FLAG $DRY_RUN_FLAG
+            ;;
           "migrate")
             MAX_PAGES="${{ github.event.inputs.max_pages }}"
             echo "📚 Running historical comment migration (max $MAX_PAGES pages)..."
@@ -134,10 +159,10 @@ jobs:
             
             LIMIT_FLAG=""
             if [ "$LIMIT_PER_REPO" != "0" ]; then
-              LIMIT_FLAG="--limit $LIMIT_PER_REPO"
+              LIMIT_FLAG="--limit-per-repo $LIMIT_PER_REPO"
             fi
             
-            python github_jira_monitor.py pr-migrate --max-pages $MAX_PAGES $REPO_FLAG $LIMIT_FLAG $DRY_RUN_FLAG
+            python github_jira_monitor.py migrate --max-pages $MAX_PAGES --repos $TARGET_REPOS $LIMIT_FLAG $DRY_RUN_FLAG
             ;;
           "old-issue")
             ISSUE_LIST="${{ github.event.inputs.issue_list }}"

@@ -383,49 +383,44 @@ class GitHubJIRAMonitor:
         6. BRANCH CREATED → TODO
         7. COMMENT ONLY → DISCUSSION
         """
-        # Create labels with owner and repo name (ensure repo_name is just the name, not owner/repo)
+        # Always use only the repo name as the label
         repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
-        
-        # Avoid duplicate labels when owner and repo name are the same
-        if repo_owner == repo_name_only:
-            base_labels = [repo_owner]
-        else:
-            base_labels = [repo_owner, repo_name_only]
-        
+        base_labels = [repo_name_only]
+
         # 1. Highest priority: MERGED → DONE
         if pr_status.get('merged', False) or pr_status.get('status') == 'merged':
-            return "Done", base_labels + ["fork-repo", "merged"]
-        
+            return "Done", base_labels
+
         # 2. RELEASED → RELEASED
         if pr_status.get('status') == 'released' or (pr_status.get('merged') and self.check_release_status(f"{repo_owner}/{repo_name}", pr_status.get('pr_number'))):
-            return "Released", base_labels + ["fork-repo", "released"]
-        
+            return "Released", base_labels
+
         # 3. OPEN PR + ACTIVITY → IN PROGRESS (Backward Flow)
         if event_context:
             is_push_event = event_context.get('is_push_event', False)
             is_comment_on_open_pr = event_context.get('is_comment_on_open_pr', False)
             is_mention_on_open_pr = event_context.get('is_mention_on_open_pr', False)
             if (is_push_event and pr_status.get('is_pr')) or is_comment_on_open_pr or is_mention_on_open_pr:
-                return "In Progress", base_labels + ["fork-repo", "in-progress"]
-        
+                return "In Progress", base_labels
+
         # 4. OPEN PR → PULL REQUEST
         if (pr_status.get('is_pr') or pr_status.get('has_linked_pr')):
-            return "Pull Request", base_labels + ["fork-repo", "pull-request"]
-        
+            return "Pull Request", base_labels
+
         # 5. COMMITS ON BRANCH → IN PROGRESS (from PushEvent processing)
         if event_context:
             is_push_event = event_context.get('is_push_event', False)
             is_first_commit = event_context.get('is_first_commit', False)
             is_branch_work = event_context.get('is_branch_with_issue_number', False)
             if is_push_event and (is_first_commit or is_branch_work):
-                return "In Progress", base_labels + ["fork-repo", "in-progress"]
-        
+                return "In Progress", base_labels
+
         # 6. BRANCH CREATED → TODO
         if event_context and event_context.get('is_branch_created_with_issue', False):
-            return "Todo", base_labels + ["fork-repo", "todo"]
-        
+            return "Todo", base_labels
+
         # 7. COMMENT ONLY → DISCUSSION (default case)
-        return "Discussion", base_labels + ["fork-repo"]
+        return "Discussion", base_labels
     
     def check_release_status(self, repo_name: str, pr_number: int = None) -> bool:
         """Check if merged code has been released by looking for release tags"""
@@ -501,14 +496,9 @@ class GitHubJIRAMonitor:
                     summary = task.get('fields', {}).get('summary', '')
                     labels = task.get('fields', {}).get('labels', [])
                     
-                    # Extract repo name from labels
-                    repo_labels = [label for label in labels if label not in ['fork-repo', 'merged', 'pull-request']]
-                    
-                    if len(repo_labels) >= 2:
-                        repo_name = f"{repo_labels[0]}/{repo_labels[1]}"
-                    elif len(repo_labels) == 1:
-                        # Single label might be owner/repo same name
-                        repo_name = f"{repo_labels[0]}/{repo_labels[0]}"
+                    # Only use the first label as the repo name
+                    if labels:
+                        repo_name = labels[0]
                     else:
                         print(f"⚠️  Could not determine repo for task {task_key}")
                         continue
@@ -1226,6 +1216,11 @@ class GitHubJIRAMonitor:
             print(f"Title: {issue_title}")
             
             # Use the enhanced process_specific_issue method (now ensures correct repo path)
+            # Ensure repo_owner and repo_name are not duplicated (never owner/repo as repo_name)
+            if '/' in repo_name:
+                parts = repo_name.split('/')
+                repo_owner = parts[0]
+                repo_name = parts[1]
             result, success = self.process_specific_issue(repo_owner, repo_name, issue_number, dry_run)
             print(f"✅ Authorship event processed: {result}")
             return result, success
@@ -1569,11 +1564,6 @@ Created Date: {created_at}"""
 
         for repo in repo_list:
             if repo:
-                print(f"\n🔍 Fetching events for repository: {repo}")
-            events = self.fetch_github_events(max_pages=max_pages, repo=repo)
-            comment_events = self.filter_comment_events(events)
-
-            if not comment_events:
                 print(f"No comment events found in the specified range for {repo if repo else 'all repos'}")
                 continue
 
@@ -1607,65 +1597,67 @@ Created Date: {created_at}"""
         try:
             print(f"\n--- Processing Specific Issue #{issue_number} ---")
             print(f"Repository: {repo_owner}/{repo_name}")
-            
+
             # Check if should skip (skip own repos)
             if self.should_skip_repo(repo_owner):
                 print(f"✅ SKIPPED: Own/org repo - {repo_owner}/{repo_name}")
                 return 'skipped', True
-            
+
+            # Ensure repo_name is just the repo name, not owner/repo
+            if '/' in repo_name:
+                repo_name = repo_name.split('/')[-1]
+
             # Fetch issue details
             headers = self.get_github_headers()
-            
             issue_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_number}"
             response = requests.get(issue_url, headers=headers, timeout=10)
-            
+
             if response.status_code != 200:
                 print(f"❌ Could not fetch issue #{issue_number}: {response.status_code}")
                 return 'error', False
-            
+
             issue_data = response.json()
             issue_title = issue_data.get('title', 'No title')
             issue_body = issue_data.get('body', 'No description available')
             issue_html_url = issue_data.get('html_url', '')
             issue_state = issue_data.get('state', 'unknown')
             created_at = issue_data.get('created_at', '')
-            
+
             print(f"Title: {issue_title}")
             print(f"State: {issue_state}")
             print(f"URL: {issue_html_url}")
-            
+
             # Check for existing JIRA task
             existing_key = self.search_existing_jira_task(issue_html_url, issue_number, repo_name)
-            
             if existing_key:
                 print(f"🔄 JIRA task already exists: {existing_key}")
                 return 'existing', True
-            
+
             # Check for user comments
             comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_number}/comments"
             comments_response = requests.get(comments_url, headers=headers, timeout=10)
-            
+
             user_comments = []
             if comments_response.status_code == 200:
                 comments = comments_response.json()
                 user_comments = [c for c in comments if c.get('user', {}).get('login') == self.github_user]
-            
+
             print(f"Your comments found: {len(user_comments)}")
-            
+
             # Check if user is the author of this issue/PR
             issue_author = issue_data.get('user', {}).get('login', '')
             is_author = (issue_author == self.github_user)
-            
+
             print(f"Issue/PR author: {issue_author}")
             print(f"You are the author: {is_author}")
-            
+
             if not user_comments and not is_author:
                 print("❌ No comments found by you on this issue and you're not the author")
                 return 'no_comments', False
-            
+
             # Check fork status
             is_fork = self.check_fork_status(f"{repo_owner}/{repo_name}")
-            
+
             # Determine content for JIRA task
             if user_comments:
                 # Use the first comment for JIRA task creation
@@ -1678,37 +1670,28 @@ Created Date: {created_at}"""
                 comment_body = f"Authored this {'PR' if issue_data.get('pull_request') else 'issue'}"
                 comment_date = created_at
                 content_type = "authorship"
-            
+
             # Check PR status to determine Kanban column
             pr_status = self.check_pr_status(repo_owner, repo_name, issue_number)
-            
+
             # For old issue migration, always use Pull Request for PRs (don't put in Done)
             if pr_status.get('is_pr') or pr_status.get('has_linked_pr'):
                 # This is a PR or has linked PR - always go to Pull Request column
                 kanban_status = "Pull Request"
                 pr_state = pr_status.get('state', 'unknown')
-                if pr_status.get('merged'):
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "merged"]
-                elif pr_state == 'closed':
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "closed"]
-                elif pr_state == 'open':
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request", "open"]
-                else:
-                    labels = [repo_owner, repo_name, "fork-repo", "pull-request"]
+                repo_label = repo_name
+                labels = [repo_label]
             else:
                 # Regular issue discussion
                 kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name)
-            
-            # Avoid duplicate labels when owner and repo name are the same
-            if repo_owner == repo_name:
-                labels = [repo_owner] + [l for l in labels if l not in [repo_owner, repo_name]]
-            
+                labels = [repo_name]
+
             print(f"📊 Issue Analysis:")
             print(f"   Is Fork: {is_fork}")
             print(f"   PR Status: {pr_status}")
             print(f"   Kanban Column: {kanban_status}")
             print(f"   Labels: {labels}")
-            
+
             # Determine task type and description
             if kanban_status == "Done":
                 task_type = "contribution-merged"
@@ -1722,10 +1705,10 @@ Created Date: {created_at}"""
             else:
                 task_type = "external-discussion"
                 description_prefix = "💬 Discussion on External Repo"
-            
+
             # Create new task
             task_summary = f"{issue_number} - {issue_title}"
-            
+
             # Enhanced description with PR status
             pr_info = ""
             if pr_status.get('is_pr'):
@@ -1736,7 +1719,7 @@ Created Date: {created_at}"""
                 pr_info = f"\n🔗 Linked to PR #{pr_status.get('pr_number')} - Status: {pr_status.get('state', 'unknown')}"
                 if pr_status.get('merged'):
                     pr_info += " - ✅ MERGED"
-            
+
             # Add all comments if multiple, or authorship info
             if content_type == "authorship":
                 comments_section = f"Authored this {'PR' if pr_status.get('is_pr') else 'issue'}:\n{issue_body}"
@@ -1754,7 +1737,7 @@ Created Date: {created_at}"""
                         comment_date_extra = comment.get('created_at', 'Unknown')
                         comment_body_extra = comment.get('body', '')
                         comments_section += f"\n\nComment {i} ({comment_date_extra}):\n{comment_body_extra}"
-            
+
             task_description = f"""{description_prefix}
 
 Issue Description:
@@ -1767,17 +1750,16 @@ GitHub Issue: {issue_html_url}
 Repo: {repo_owner}/{repo_name}
 Kanban Status: {kanban_status}
 Original Date: {comment_date}"""
-            
+
             if dry_run:
                 print(f"🧪 DRY RUN: Would create {task_type} task")
                 print(f"   Summary: {task_summary}")
                 print(f"   Labels: {labels}")
                 print(f"   Kanban Status: {kanban_status}")
                 return 'dry_run', True
-            
+
             # Create JIRA task
             headers = self.get_jira_headers()
-            
             payload = {
                 "fields": {
                     "project": {"key": self.jira_project},
@@ -1787,24 +1769,22 @@ Original Date: {comment_date}"""
                     "labels": labels
                 }
             }
-            
+
             url = f"https://{self.jira_domain}/rest/api/2/issue"
             response = requests.post(url, headers=headers, json=payload, timeout=30)
-            
+
             if response.status_code in [200, 201]:
                 result = response.json()
                 task_key = result.get('key', 'Unknown')
                 print(f"✅ Created JIRA task: {task_key} (Status: {kanban_status})")
-                
                 # Try to move to appropriate status if needed
                 self.update_jira_status(task_key, kanban_status, dry_run=False)
-                
                 return 'created', True
             else:
                 print(f"❌ Failed to create JIRA task: {response.status_code}")
                 print(f"   Response: {response.text[:200]}")
                 return 'error', False
-                
+
         except Exception as e:
             print(f"❌ Error processing issue: {e}")
             return 'error', False

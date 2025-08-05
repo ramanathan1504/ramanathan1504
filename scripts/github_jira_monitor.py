@@ -13,6 +13,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
+from collections import defaultdict
 
 
 class GitHubJIRAMonitor:
@@ -43,15 +44,47 @@ class GitHubJIRAMonitor:
             url = f"https://{self.jira_domain}/rest/api/2/field"
             resp = requests.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
-                for field in resp.json():
-                    if field.get('name') == 'Epic Link':
-                        self._epic_link_field_id = field['id']
-                        print(f"[JIRA] Epic Link field id: {self._epic_link_field_id}")
+                fields = resp.json()
+                
+                # Look for Epic Link field with different possible names
+                epic_link_candidates = ['Epic Link', 'Epic', 'Parent Epic', 'Epic Name']
+                
+                for field in fields:
+                    field_name = field.get('name', '').strip()
+                    field_id = field.get('id', '')
+                    
+                    # Check for exact matches first
+                    if field_name in epic_link_candidates:
+                        self._epic_link_field_id = field_id
+                        print(f"[JIRA] Found Epic Link field: '{field_name}' -> {field_id}")
                         return self._epic_link_field_id
-            print("[JIRA] Could not find 'Epic Link' field, defaulting to 'customfield_10008'")
+                    
+                    # Check for partial matches
+                    if 'epic' in field_name.lower() and 'link' in field_name.lower():
+                        self._epic_link_field_id = field_id
+                        print(f"[JIRA] Found Epic Link field (partial match): '{field_name}' -> {field_id}")
+                        return self._epic_link_field_id
+                
+                # If no Epic Link field found, try common custom field IDs
+                common_epic_fields = ['customfield_10008', 'customfield_10014', 'customfield_10010']
+                for field_id in common_epic_fields:
+                    for field in fields:
+                        if field.get('id') == field_id:
+                            field_name = field.get('name', '')
+                            if 'epic' in field_name.lower():
+                                self._epic_link_field_id = field_id
+                                print(f"[JIRA] Using common Epic field: '{field_name}' -> {field_id}")
+                                return self._epic_link_field_id
+                            
+                print("[JIRA] Could not find 'Epic Link' field, trying default customfield_10008")
+            else:
+                print(f"[JIRA] Error fetching fields: {resp.status_code}")
         except Exception as e:
             print(f"[JIRA] Error fetching Epic Link field id: {e}")
+        
+        # Default fallback
         self._epic_link_field_id = 'customfield_10008'
+        print(f"[JIRA] Using default Epic Link field: {self._epic_link_field_id}")
         return self._epic_link_field_id
     def post_action_log_to_jira(self, jira_key: str, action_type: str, action_detail: str, actor: str, timestamp: str, dry_run: bool = False) -> bool:
         """Post an action log comment to the JIRA issue using the provided template."""
@@ -211,11 +244,1012 @@ class GitHubJIRAMonitor:
         # Comma-separated orgs to skip, or empty list
         skip_orgs = os.environ.get('SKIP_ORGS', '')
         self.skip_orgs = [org.strip() for org in skip_orgs.split(',') if org.strip()]
+        
+        # Always skip intemo-dev (your organization)
+        if 'intemo-dev' not in self.skip_orgs:
+            self.skip_orgs.append('intemo-dev')
 
         # Basic validation
         if not self.github_user or not self.github_token or not self.jira_domain or not self.jira_project or not self.jira_auth:
             print("❌ ERROR: Missing required environment variables. Please set GITHUB_USER, GITHUB_TOKEN, JIRA_DOMAIN, JIRA_PROJECT, JIRA_AUTH (and optionally SKIP_ORGS).")
             exit(1)
+
+    def gather_and_group_github_data(self, max_pages: int = 10, since_minutes: int = None) -> Dict:
+        """
+        CORE FUNCTION: Gather all GitHub data and group by owner/repo/issue number
+        This implements the flow from the STATUS_FLOW_PROPOSAL.md
+        
+        Returns structured data grouped by repo and issue with status analysis
+        """
+        print("🚀 === CORE DATA GATHERING & GROUPING ===")
+        print(f"Fetching GitHub data (max {max_pages} pages)...")
+        
+        # Calculate since timestamp if provided
+        since = None
+        if since_minutes:
+            since = (datetime.now() - timedelta(minutes=since_minutes)).isoformat() + 'Z'
+            print(f"Looking for events since: {since}")
+        
+        # 1. GATHER ALL GITHUB EVENTS
+        print("\n📊 Step 1: Gathering all GitHub events...")
+        all_events = self.fetch_github_events(since=since, max_pages=max_pages)
+        
+        # 2. GROUP EVENTS BY REPO AND ISSUE
+        print(f"\n🗂️  Step 2: Grouping {len(all_events)} events by owner/repo/issue...")
+        grouped_data = defaultdict(lambda: defaultdict(lambda: {
+            'issue_details': None,
+            'events': [],
+            'pr_info': None,
+            'branch_info': {},
+            'status_timeline': [],
+            'final_status': 'DISCUSSION'
+        }))
+        
+        # Group all events by repo and issue
+        for event in all_events:
+            repo_info = event.get('repo', {})
+            repo_name = repo_info.get('name', '')
+            
+            if not repo_name or '/' not in repo_name:
+                continue
+                
+            repo_owner, repo_name_only = repo_name.split('/', 1)
+            
+            # Skip own/org repos
+            if self.should_skip_repo(repo_owner):
+                continue
+            
+            # Extract issue numbers from different event types
+            issue_numbers = self._extract_issue_numbers_from_event(event)
+            
+            # Add event to all related issues
+            for issue_num in issue_numbers:
+                repo_key = f"{repo_owner}/{repo_name_only}"
+                grouped_data[repo_key][issue_num]['events'].append(event)
+        
+        # 3. ANALYZE STATUS FOR EACH GROUPED ISSUE
+        print(f"\n📈 Step 3: Analyzing status for each issue...")
+        analyzed_data = {}
+        
+        for repo_key, issues in grouped_data.items():
+            analyzed_data[repo_key] = {}
+            repo_owner, repo_name_only = repo_key.split('/', 1)
+            
+            print(f"\n📦 Analyzing repository: {repo_key}")
+            
+            for issue_num, issue_data in issues.items():
+                print(f"  🔍 Analyzing issue #{issue_num}...")
+                
+                # Fetch full issue details
+                issue_details = self._get_issue_details_for_analysis(repo_owner, repo_name_only, issue_num)
+                issue_data['issue_details'] = issue_details
+                
+                # Analyze PR status
+                pr_info = self._analyze_pr_status_for_issue(repo_owner, repo_name_only, issue_num, issue_data['events'])
+                issue_data['pr_info'] = pr_info
+                
+                # Determine final status using STATUS_FLOW_PROPOSAL logic
+                final_status, status_reasons = self._determine_final_status(issue_data, pr_info)
+                issue_data['final_status'] = final_status
+                issue_data['status_reasons'] = status_reasons
+                
+                # Store analyzed data
+                analyzed_data[repo_key][issue_num] = issue_data
+                
+                print(f"    📊 Final Status: {final_status}")
+                print(f"    📝 Reasons: {', '.join(status_reasons)}")
+        
+        # 4. SUMMARY STATISTICS
+        total_repos = len(analyzed_data)
+        total_issues = sum(len(issues) for issues in analyzed_data.values())
+        status_counts = defaultdict(int)
+        
+        for repo_issues in analyzed_data.values():
+            for issue_data in repo_issues.values():
+                status_counts[issue_data['final_status']] += 1
+        
+        print(f"\n📊 === GROUPING SUMMARY ===")
+        print(f"Total Repositories: {total_repos}")
+        print(f"Total Issues: {total_issues}")
+        print(f"Status Distribution:")
+        for status, count in status_counts.items():
+            print(f"  {status}: {count}")
+        
+        return {
+            'grouped_data': analyzed_data,
+            'summary': {
+                'total_repos': total_repos,
+                'total_issues': total_issues,
+                'status_counts': dict(status_counts),
+                'timestamp': datetime.now().isoformat()
+            }
+        }
+    
+    def _extract_issue_numbers_from_event(self, event: Dict) -> List[int]:
+        """Extract all possible issue numbers from a GitHub event"""
+        issue_numbers = []
+        event_type = event.get('type', '')
+        payload = event.get('payload', {})
+        
+        # Direct issue/PR number from event
+        if event_type in ['IssuesEvent', 'PullRequestEvent', 'IssueCommentEvent', 'PullRequestReviewCommentEvent']:
+            if 'issue' in payload:
+                issue_numbers.append(payload['issue'].get('number'))
+            if 'pull_request' in payload:
+                issue_numbers.append(payload['pull_request'].get('number'))
+                
+        # Extract from branch names in push events
+        elif event_type == 'PushEvent':
+            ref = payload.get('ref', '')
+            branch_name = ref.replace('refs/heads/', '') if ref.startswith('refs/heads/') else ref
+            branch_issue = self.parse_issue_from_branch(branch_name)
+            if branch_issue:
+                issue_numbers.append(branch_issue)
+        
+        # Extract from comments that reference issues
+        if 'comment' in payload:
+            comment_body = payload['comment'].get('body', '')
+            referenced_issues = re.findall(r'#(\d+)', comment_body)
+            issue_numbers.extend([int(num) for num in referenced_issues])
+        
+        return [num for num in issue_numbers if num]  # Remove None values
+    
+    def _get_issue_details_for_analysis(self, repo_owner: str, repo_name: str, issue_num: int) -> Dict:
+        """Fetch detailed issue information for analysis"""
+        try:
+            headers = self.get_github_headers()
+            url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_num}"
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"    ⚠️  Could not fetch issue #{issue_num}: {response.status_code}")
+                return {}
+        except Exception as e:
+            print(f"    ❌ Error fetching issue #{issue_num}: {e}")
+            return {}
+    
+    def _analyze_pr_status_for_issue(self, repo_owner: str, repo_name: str, issue_num: int, events: List[Dict]) -> Dict:
+        """Analyze PR status for an issue using events and GitHub API"""
+        pr_info = {
+            'has_pr': False,
+            'pr_number': None,
+            'pr_state': None,
+            'pr_merged': False,
+            'pr_branch': None,
+            'is_pr_itself': False
+        }
+        
+        try:
+            # Check if this issue number is actually a PR
+            headers = self.get_github_headers()
+            url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{issue_num}"
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                pr_data = response.json()
+                pr_info.update({
+                    'is_pr_itself': True,
+                    'has_pr': True,
+                    'pr_number': issue_num,
+                    'pr_state': pr_data.get('state'),
+                    'pr_merged': pr_data.get('merged', False),
+                    'pr_branch': pr_data.get('head', {}).get('ref')
+                })
+                return pr_info
+            
+            # Look for linked PRs through branch names and events
+            for event in events:
+                if event.get('type') == 'PushEvent':
+                    payload = event.get('payload', {})
+                    ref = payload.get('ref', '')
+                    branch_name = ref.replace('refs/heads/', '') if ref.startswith('refs/heads/') else ref
+                    
+                    # Check if there's a PR for this branch
+                    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
+                    pr_params = {'head': f"{repo_owner}:{branch_name}", 'state': 'all'}
+                    pr_response = requests.get(pr_url, headers=headers, params=pr_params, timeout=10)
+                    
+                    if pr_response.status_code == 200:
+                        prs = pr_response.json()
+                        if prs:
+                            pr = prs[0]  # Get the first (most recent) PR for this branch
+                            pr_info.update({
+                                'has_pr': True,
+                                'pr_number': pr.get('number'),
+                                'pr_state': pr.get('state'),
+                                'pr_merged': pr.get('merged', False),
+                                'pr_branch': branch_name
+                            })
+                            break
+            
+            return pr_info
+            
+        except Exception as e:
+            print(f"    ❌ Error analyzing PR status for issue #{issue_num}: {e}")
+            return pr_info
+    
+    def _determine_final_status(self, issue_data: Dict, pr_info: Dict) -> Tuple[str, List[str]]:
+        """
+        Determine final status using STATUS_FLOW_PROPOSAL.md priority logic:
+        1. MERGED (highest priority) → DONE
+        2. RELEASED → RELEASED  
+        3. OPEN PR + ACTIVITY → IN PROGRESS
+        4. OPEN PR → PULL REQUEST
+        5. CLOSED PR (not merged) → PULL REQUEST
+        6. COMMITS ON BRANCH → IN PROGRESS
+        7. BRANCH CREATED → TODO
+        8. COMMENT ONLY → DISCUSSION
+        """
+        reasons = []
+        
+        # 1. MERGED (highest priority) → DONE
+        if pr_info.get('pr_merged'):
+            reasons.append("PR merged")
+            return 'DONE', reasons
+        
+        # 2. RELEASED → RELEASED (would need release detection - placeholder for now)
+        # TODO: Implement release detection logic
+        
+        # 3. OPEN PR + ACTIVITY → IN PROGRESS
+        if pr_info.get('pr_state') == 'open' and len(issue_data['events']) > 1:
+            recent_activity = any(
+                event.get('type') in ['IssueCommentEvent', 'PullRequestReviewCommentEvent', 'PushEvent']
+                for event in issue_data['events']
+            )
+            if recent_activity:
+                reasons.append("Open PR with recent activity")
+                return 'IN PROGRESS', reasons
+        
+        # 4. OPEN PR → PULL REQUEST
+        if pr_info.get('pr_state') == 'open':
+            reasons.append("Open PR exists")
+            return 'PULL REQUEST', reasons
+        
+        # 5. CLOSED PR (not merged) → BUILD BROKEN
+        if pr_info.get('pr_state') == 'closed' and not pr_info.get('pr_merged'):
+            reasons.append("PR closed without merge")
+            return 'BUILD BROKEN', reasons
+        if pr_info.get('pr_state') == 'open' and len(issue_data['events']) > 1:
+            recent_activity = any(
+                event.get('type') in ['IssueCommentEvent', 'PullRequestReviewCommentEvent', 'PushEvent']
+                for event in issue_data['events']
+            )
+            if recent_activity:
+                reasons.append("Open PR with recent activity")
+                return 'IN PROGRESS', reasons
+        
+        # 5. OPEN PR → PULL REQUEST
+        if pr_info.get('pr_state') == 'open':
+            reasons.append("Open PR exists")
+            return 'PULL REQUEST', reasons
+        
+        # 5. COMMITS ON BRANCH → IN PROGRESS
+        has_push_events = any(event.get('type') == 'PushEvent' for event in issue_data['events'])
+        if has_push_events:
+            reasons.append("Push events detected")
+            return 'IN PROGRESS', reasons
+        
+        # 6. BRANCH CREATED → TODO
+        has_branch_creation = any(
+            event.get('type') == 'CreateEvent' and event.get('payload', {}).get('ref_type') == 'branch'
+            for event in issue_data['events']
+        )
+        if has_branch_creation:
+            reasons.append("Branch created")
+            return 'TODO', reasons
+        
+        # 7. COMMENT ONLY → DISCUSSION (default)
+        reasons.append("Comment activity only")
+        return 'DISCUSSION', reasons
+    
+    def create_jira_objects_from_grouped_data(self, grouped_data: Dict, dry_run: bool = False) -> Dict:
+        """
+        Create JIRA objects from the grouped and analyzed GitHub data
+        This function creates Epics for repo owners and Tasks for issues
+        """
+        print("\n🎯 === CREATING JIRA OBJECTS FROM GROUPED DATA ===")
+        
+        stats = {
+            'epics_created': 0,
+            'epics_found': 0,
+            'tasks_created': 0,
+            'tasks_updated': 0,
+            'tasks_existing': 0,
+            'errors': 0
+        }
+        
+        # Check if project supports Epics
+        supports_epics = self.project_supports_epic()
+        epic_link_field = self.get_epic_link_field_id() if supports_epics else None
+        
+        print(f"📊 JIRA Project supports Epics: {supports_epics}")
+        if supports_epics:
+            print(f"📊 Epic Link field ID: {epic_link_field}")
+        
+        created_epics = {}  # Cache for created/found epics
+        
+        for repo_key, issues in grouped_data.items():
+            repo_owner, repo_name = repo_key.split('/', 1)
+            
+            # Filter: Only process forked and external repos (skip own repos and connected orgs)
+            if self.should_skip_repo(repo_owner):
+                print(f"⏭️  Skipping {repo_key} (own repo or connected org)")
+                continue
+                
+            print(f"\n📦 Processing repository: {repo_key} (external/forked repo)")
+            
+            # 1. CREATE OR FIND EPIC FOR REPO OWNER (if supported)
+            epic_key = None
+            if supports_epics:
+                epic_key = self._get_or_create_epic_for_owner(repo_owner, created_epics, dry_run)
+                if epic_key:
+                    if epic_key in created_epics:
+                        stats['epics_found'] += 1
+                    else:
+                        stats['epics_created'] += 1
+                        created_epics[epic_key] = repo_owner
+            
+            # 2. CREATE TASKS FOR EACH ISSUE
+            for issue_num, issue_data in issues.items():
+                print(f"  🎫 Processing issue #{issue_num}...")
+                
+                try:
+                    result = self._create_jira_task_from_grouped_data(
+                        repo_owner, repo_name, issue_num, issue_data, epic_key, dry_run
+                    )
+                    
+                    if result == 'created':
+                        stats['tasks_created'] += 1
+                    elif result == 'updated':
+                        stats['tasks_updated'] += 1
+                    elif result == 'existing':
+                        stats['tasks_existing'] += 1
+                    
+                except Exception as e:
+                    print(f"    ❌ Error creating task for issue #{issue_num}: {e}")
+                    stats['errors'] += 1
+        
+        print(f"\n📊 === JIRA OBJECT CREATION SUMMARY ===")
+        for key, value in stats.items():
+            print(f"{key.replace('_', ' ').title()}: {value}")
+        
+        return stats
+    
+    def _get_or_create_epic_for_owner(self, repo_owner: str, created_epics: Dict, dry_run: bool = False) -> Optional[str]:
+        """Get or create an Epic for the repository owner"""
+        # Check if we already have this Epic
+        for epic_key, owner in created_epics.items():
+            if owner == repo_owner:
+                return epic_key
+        
+        # Search for existing Epic
+        try:
+            headers = self.get_jira_headers()
+            # Escape quotes in repo_owner for JQL search
+            escaped_owner = repo_owner.replace('\\', '\\\\').replace('"', '\\"')
+            jql = f'project = "{self.jira_project}" AND issuetype = Epic AND summary ~ "{escaped_owner}"'
+            url = f"https://{self.jira_domain}/rest/api/2/search"
+            params = {'jql': jql, 'maxResults': 1}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                issues = response.json().get('issues', [])
+                if issues:
+                    epic_key = issues[0]['key']
+                    print(f"    📋 Found existing Epic: {epic_key} for {repo_owner}")
+                    created_epics[epic_key] = repo_owner
+                    return epic_key
+            
+            # Create new Epic
+            if dry_run:
+                print(f"    🧪 DRY RUN: Would create Epic for {repo_owner}")
+                epic_key = f"{repo_owner}-DRYRUN"
+                created_epics[epic_key] = repo_owner
+                return epic_key
+            
+            epic_summary = f"{repo_owner}"
+            epic_description = f"""Epic for tracking GitHub contributions to repositories owned by {repo_owner}.
+
+This Epic automatically groups all GitHub issues, PRs, and contributions 
+related to {repo_owner}'s repositories.
+
+Auto-created by GitHub-JIRA Monitor
+Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+            epic_payload = {
+                "fields": {
+                    "project": {"key": self.jira_project},
+                    "summary": epic_summary,
+                    "description": epic_description,
+                    "issuetype": {"name": "Epic"},
+                    "labels": [repo_owner, "github-contributions"]
+                }
+            }
+            
+            # Only add Epic fields if they are available on the create screen
+            # Skip Epic Name and Epic Key fields for now to avoid 400 errors
+            print(f"    📝 Creating Epic with basic fields only (avoiding custom field errors)")
+            
+            url = f"https://{self.jira_domain}/rest/api/2/issue"
+            response = requests.post(url, headers=headers, json=epic_payload, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                result = response.json()
+                epic_key = result.get('key')
+                print(f"    ✅ Created Epic: {epic_key} for {repo_owner}")
+                created_epics[epic_key] = repo_owner
+                
+                # Verify Epic was created properly
+                self._verify_epic_creation(epic_key, repo_owner)
+                
+                return epic_key
+            else:
+                print(f"    ❌ Failed to create Epic for {repo_owner}: {response.status_code}")
+                print(f"    📝 Response: {response.text[:300]}")
+                return None
+                
+        except Exception as e:
+            print(f"    ❌ Error creating Epic for {repo_owner}: {e}")
+            return None
+    
+    def _verify_epic_creation(self, epic_key: str, repo_owner: str) -> bool:
+        """Verify that an Epic was created successfully and has proper fields"""
+        try:
+            headers = self.get_jira_headers()
+            url = f"https://{self.jira_domain}/rest/api/2/issue/{epic_key}"
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                epic_data = response.json()
+                fields = epic_data.get('fields', {})
+                
+                issue_type = fields.get('issuetype', {}).get('name', '')
+                summary = fields.get('summary', '')
+                
+                if issue_type.lower() == 'epic':
+                    print(f"    ✅ Epic {epic_key} verified as Epic type")
+                    print(f"    📝 Epic Summary: {summary}")
+                    
+                    # Check Epic fields
+                    epic_name = fields.get('customfield_10011')
+                    epic_key_field = fields.get('customfield_10013')
+                    
+                    if epic_name:
+                        print(f"    📝 Epic Name field: {epic_name}")
+                    if epic_key_field:
+                        print(f"    🔑 Epic Key field: {epic_key_field}")
+                    
+                    return True
+                else:
+                    print(f"    ⚠️  Created issue {epic_key} is not an Epic (type: {issue_type})")
+                    return False
+            else:
+                print(f"    ❌ Could not verify Epic {epic_key}: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"    ❌ Error verifying Epic {epic_key}: {e}")
+            return False
+    
+    def _create_jira_task_from_grouped_data(self, repo_owner: str, repo_name: str, issue_num: int, 
+                                          issue_data: Dict, epic_key: Optional[str], dry_run: bool = False) -> str:
+        """Create a JIRA task from grouped issue data"""
+        issue_details = issue_data.get('issue_details', {})
+        pr_info = issue_data.get('pr_info', {})
+        final_status = issue_data.get('final_status', 'DISCUSSION')
+        status_reasons = issue_data.get('status_reasons', [])
+        
+        # Extract issue information
+        issue_title = issue_details.get('title', f'Issue #{issue_num}')
+        issue_body = issue_details.get('body', 'No description available')
+        issue_url = issue_details.get('html_url', f'https://github.com/{repo_owner}/{repo_name}/issues/{issue_num}')
+        issue_author = issue_details.get('user', {}).get('login', 'unknown')
+        created_at = issue_details.get('created_at', '')
+        
+        # Check for existing task
+        existing_key = self.search_existing_jira_task(issue_url, issue_num, repo_name, repo_owner)
+        if existing_key:
+            print(f"    🔄 Task already exists: {existing_key}")
+            return 'existing'
+        
+        # Determine task type and description prefix
+        if pr_info.get('is_pr_itself'):
+            if pr_info.get('pr_merged'):
+                task_type = "✅ MERGED Pull Request"
+            elif pr_info.get('pr_state') == 'open':
+                task_type = "🔄 OPEN Pull Request"
+            else:
+                task_type = "💥 BUILD BROKEN Pull Request"
+        else:
+            task_type = f"📋 GitHub Issue - {final_status}"
+        
+        # Create task summary
+        task_summary = f"#{issue_num} - {issue_title}"
+        
+        # Get the first comment (original description) and subsequent comments
+        comments_data = self._get_issue_comments_for_task(repo_owner, repo_name, issue_num)
+        first_comment = comments_data.get('first_comment', issue_body or 'No description available')
+        subsequent_comments = comments_data.get('subsequent_comments', [])
+        
+        # Create activity log from events
+        activity_log = self._create_activity_log_from_events(issue_data.get('events', []))
+        
+        # Create detailed description with first comment as main description
+        task_description = f"""{task_type}
+
+*Repository:* {repo_owner}/{repo_name}
+*Issue/PR:* #{issue_num} - {issue_title}
+*Author:* @{issue_author}
+*Created:* {created_at}
+*URL:* {issue_url}
+*Status:* {final_status}
+
+----
+
+*Original Issue Description:*
+
+{first_comment}
+
+----
+
+*Status Analysis:*
+• Final Status: {final_status}
+• Reasons: {', '.join(status_reasons)}
+• Has PR: {pr_info.get('has_pr', False)}
+• PR Merged: {pr_info.get('pr_merged', False)}
+
+{activity_log}
+
+----
+_Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
+
+        if dry_run:
+            print(f"    🧪 DRY RUN: Would create task")
+            print(f"      Summary: {task_summary}")
+            print(f"      Status: {final_status}")
+            print(f"      Epic: {epic_key or '[none]'}")
+            print(f"      Comments to add: {len(subsequent_comments)}")
+            return 'created'
+        
+        # Create JIRA task
+        try:
+            headers = self.get_jira_headers()
+            
+            payload = {
+                "fields": {
+                    "project": {"key": self.jira_project},
+                    "summary": task_summary,
+                    "description": task_description,
+                    "issuetype": {"name": "Task"},
+                    "labels": [repo_name, repo_owner, final_status.lower().replace(' ', '-')]
+                }
+            }
+            
+            # Add Epic link if available - Enhanced Epic attachment
+            epic_to_attach = None
+            if epic_key and self.project_supports_epic():
+                print(f"    🔗 Will attach task to Epic: {epic_key} after creation")
+                epic_to_attach = epic_key
+                # Don't add Epic field during creation as it's not on the create screen
+            else:
+                if not epic_key:
+                    print(f"    ℹ️  No Epic key available for linking")
+                if not self.project_supports_epic():
+                    print(f"    ℹ️  Project does not support Epics")
+            
+            url = f"https://{self.jira_domain}/rest/api/2/issue"
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                result = response.json()
+                task_key = result.get('key')
+                
+                # Add subsequent comments to JIRA task
+                if subsequent_comments:
+                    self._add_comments_to_jira_task(task_key, subsequent_comments)
+                
+                # Log activity transitions in JIRA comments
+                self._log_activity_transitions_to_jira(task_key, issue_data.get('events', []), final_status)
+                
+                # Attach Epic after task creation if needed
+                if epic_to_attach and self.project_supports_epic():
+                    print(f"    🔗 Attaching task to Epic: {epic_to_attach}")
+                    epic_attached = self._attach_epic_post_creation(task_key, epic_to_attach, repo_owner)
+                    epic_status = "✅ Epic attached" if epic_attached else "⚠️  Epic attachment failed"
+                    print(f"    ✅ Created task: {task_key} (Status: {final_status}, Epic: {epic_to_attach}, {epic_status})")
+                else:
+                    print(f"    ✅ Created task: {task_key} (Status: {final_status}, Epic: {epic_to_attach or '[none]'})")
+                
+                return 'created'
+            else:
+                print(f"    ❌ Failed to create task: {response.status_code} {response.text[:200]}")
+                return 'error'
+                
+        except Exception as e:
+            print(f"    ❌ Error creating task: {e}")
+            return 'error'
+    
+    def _verify_epic_attachment(self, task_key: str, expected_epic_key: str) -> bool:
+        """Verify that a task is properly attached to an Epic"""
+        try:
+            headers = self.get_jira_headers()
+            url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                task_data = response.json()
+                fields = task_data.get('fields', {})
+                
+                # Check different Epic link field possibilities
+                epic_link_field = self.get_epic_link_field_id()
+                
+                # Method 1: Check standard Epic Link field
+                epic_link = fields.get(epic_link_field)
+                if epic_link == expected_epic_key:
+                    print(f"    ✅ Epic attachment verified via {epic_link_field}")
+                    return True
+                
+                # Method 2: Check alternative Epic fields
+                for alt_field in ['customfield_10014', 'customfield_10011', 'customfield_10010']:
+                    alt_epic = fields.get(alt_field)
+                    if alt_epic == expected_epic_key:
+                        print(f"    ✅ Epic attachment verified via {alt_field}")
+                        return True
+                
+                # Method 3: Check Epic Name field
+                epic_name_field = fields.get('customfield_10011')
+                expected_epic_name = f"GitHub Contributions - {expected_epic_key.split('-')[0] if '-' in expected_epic_key else 'unknown'}"
+                if epic_name_field == expected_epic_name:
+                    print(f"    ✅ Epic attachment verified via Epic Name field")
+                    return True
+                
+                print(f"    ⚠️  Epic attachment not found in any field")
+                return False
+            else:
+                print(f"    ❌ Could not verify Epic attachment: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"    ❌ Error verifying Epic attachment: {e}")
+            return False
+    
+    def _get_issue_comments_for_task(self, repo_owner, repo_name, issue_num):
+        """Extract comments from GitHub issue/PR data for JIRA task creation"""
+        first_comment = None
+        subsequent_comments = []
+        
+        try:
+            # Build GitHub API URL for the issue/PR
+            issue_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_num}"
+            comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_num}/comments"
+            
+            headers = self.get_github_headers()
+            
+            # Fetch issue details
+            issue_response = requests.get(issue_url, headers=headers)
+            if issue_response.status_code == 200:
+                issue_data = issue_response.json()
+                
+                # Use issue body as first comment if it exists
+                issue_body = issue_data.get('body') or ''
+                if issue_body.strip():
+                    first_comment = {
+                        'author': issue_data.get('user', {}).get('login', 'Unknown'),
+                        'created_at': issue_data.get('created_at', ''),
+                        'body': issue_body
+                    }
+            
+            # Fetch comments
+            comments_response = requests.get(comments_url, headers=headers)
+            if comments_response.status_code == 200:
+                comments = comments_response.json()
+                
+                # Sort comments by creation date
+                comments.sort(key=lambda x: x.get('created_at', ''))
+                
+                for comment in comments:
+                    if comment.get('body', '').strip():
+                        comment_data = {
+                            'author': comment.get('user', {}).get('login', 'Unknown'),
+                            'created_at': comment.get('created_at', ''),
+                            'body': comment.get('body', '')
+                        }
+                        subsequent_comments.append(comment_data)
+                        
+        except Exception as e:
+            print(f"      ⚠️  Could not fetch comments from GitHub API: {e}")
+        
+        return {
+            'first_comment': first_comment.get('body', '') if first_comment else None,
+            'subsequent_comments': subsequent_comments
+        }
+
+    def _create_activity_log_from_events(self, events):
+        """Create activity log from GitHub events"""
+        if not events:
+            return ""
+            
+        activity_lines = []
+        
+        # Process events chronologically
+        sorted_events = sorted(events, key=lambda x: x.get('created_at', ''))
+        
+        for event in sorted_events:
+            event_type = event.get('type')
+            created_at = event.get('created_at', '')
+            
+            if event_type == 'IssuesEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_lines.append(f"• Issue opened ({created_at})")
+                elif action == 'closed':
+                    activity_lines.append(f"• Issue closed ({created_at})")
+                elif action == 'reopened':
+                    activity_lines.append(f"• Issue reopened ({created_at})")
+                    
+            elif event_type == 'PullRequestEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_lines.append(f"• Pull request opened ({created_at})")
+                elif action == 'closed':
+                    merged = event.get('payload', {}).get('pull_request', {}).get('merged', False)
+                    if merged:
+                        activity_lines.append(f"• Pull request merged ({created_at})")
+                    else:
+                        activity_lines.append(f"• Pull request closed without merge ({created_at})")
+                elif action == 'reopened':
+                    activity_lines.append(f"• Pull request reopened ({created_at})")
+                    
+            elif event_type == 'PushEvent':
+                ref = event.get('payload', {}).get('ref', '')
+                commits = len(event.get('payload', {}).get('commits', []))
+                if 'main' in ref or 'master' in ref:
+                    activity_lines.append(f"• {commits} commits pushed to main branch ({created_at})")
+                    
+            elif event_type == 'IssueCommentEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'created':
+                    activity_lines.append(f"• Comment added ({created_at})")
+        
+        if activity_lines:
+            return f"*GitHub Activity Timeline:*\n\n" + "\n".join(activity_lines[-10:])  # Last 10 activities
+        
+        return ""
+
+    def _add_comments_to_jira_task(self, task_key, comments):
+        """Add GitHub comments to JIRA task as comments"""
+        for comment in comments:
+            comment_body = f"*GitHub Comment by {comment['author']} at {comment['created_at']}:*\n\n{comment['body']}"
+            
+            jira_comment_data = {
+                "body": comment_body
+            }
+            
+            comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
+            headers = self.get_jira_headers()
+            
+            response = requests.post(
+                comment_url,
+                headers=headers,
+                json=jira_comment_data
+            )
+            
+            if response.status_code in [200, 201]:
+                print(f"      ✅ Added comment from {comment['author']} ({comment['created_at']})")
+            else:
+                print(f"      ❌ Failed to add comment: {response.status_code} - {response.text}")
+
+    def _log_activity_transitions_to_jira(self, task_key, events, final_status):
+        """Log status transitions as JIRA comments based on GitHub events"""
+        if not events:
+            return
+            
+        activity_log = []
+        
+        # Track important events that indicate status changes
+        for event in events:
+            event_type = event.get('type')
+            created_at = event.get('created_at', '')
+            
+            if event_type == 'IssuesEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_log.append(f"• Issue opened → Status: TO DO ({created_at})")
+                elif action == 'closed':
+                    activity_log.append(f"• Issue closed → Status: DONE ({created_at})")
+                elif action == 'reopened':
+                    activity_log.append(f"• Issue reopened → Status: TO DO ({created_at})")
+                    
+            elif event_type == 'PullRequestEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_log.append(f"• Pull request opened → Status: IN PROGRESS ({created_at})")
+                elif action == 'closed':
+                    merged = event.get('payload', {}).get('pull_request', {}).get('merged', False)
+                    if merged:
+                        activity_log.append(f"• Pull request merged → Status: DONE ({created_at})")
+                    else:
+                        activity_log.append(f"• Pull request closed (not merged) → Status: PULL REQUEST ({created_at})")
+                elif action == 'reopened':
+                    activity_log.append(f"• Pull request reopened → Status: IN PROGRESS ({created_at})")
+                    
+            elif event_type == 'PushEvent':
+                ref = event.get('payload', {}).get('ref', '')
+                if 'main' in ref or 'master' in ref:
+                    activity_log.append(f"• Code pushed to main branch → Status: IN PROGRESS ({created_at})")
+        
+        if activity_log:
+            activity_body = f"*Activity Log - Status Transitions:*\n\n" + "\n".join(activity_log) + f"\n\n*Final Status: {final_status}*"
+            
+            jira_comment_data = {
+                "body": activity_body
+            }
+            
+            comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
+            headers = self.get_jira_headers()
+            
+            response = requests.post(
+                comment_url,
+                headers=headers,
+                json=jira_comment_data
+            )
+            
+            if response.status_code in [200, 201]:
+                print(f"      ✅ Added activity log with {len(activity_log)} transitions")
+            else:
+                print(f"      ❌ Failed to add activity log: {response.status_code} - {response.text}")
+    
+    def _attach_epic_post_creation(self, task_key: str, epic_key: str, repo_owner: str) -> bool:
+        """Attempt to attach Epic to task after creation using different methods"""
+        try:
+            headers = self.get_jira_headers()
+            epic_link_field = self.get_epic_link_field_id()
+            
+            print(f"    🔗 Attempting post-creation Epic attachment for {task_key}")
+            
+            # Method 1: Update Epic Link field
+            update_payload = {
+                "fields": {
+                    epic_link_field: epic_key
+                }
+            }
+            
+            url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
+            response = requests.put(url, headers=headers, json=update_payload, timeout=30)
+            
+            if response.status_code == 204:
+                print(f"    ✅ Epic attached post-creation via {epic_link_field}")
+                return True
+            
+            # Method 2: Try alternative Epic fields
+            for alt_field in ['customfield_10014', 'customfield_10010']:
+                try:
+                    alt_update_payload = {
+                        "fields": {
+                            alt_field: epic_key
+                        }
+                    }
+                    
+                    response = requests.put(url, headers=headers, json=alt_update_payload, timeout=30)
+                    
+                    if response.status_code == 204:
+                        print(f"    ✅ Epic attached post-creation via {alt_field}")
+                        return True
+                except Exception as e:
+                    print(f"    ⚠️  Failed to attach Epic via {alt_field}: {e}")
+                    continue
+            
+            # Method 3: Try Epic Name field
+            try:
+                epic_name = f"GitHub Contributions - {repo_owner}"
+                epic_name_payload = {
+                    "fields": {
+                        "customfield_10011": epic_name
+                    }
+                }
+                
+                response = requests.put(url, headers=headers, json=epic_name_payload, timeout=30)
+                
+                if response.status_code == 204:
+                    print(f"    ✅ Epic attached post-creation via Epic Name field")
+                    return True
+            except Exception as e:
+                print(f"    ⚠️  Failed to attach Epic via Epic Name: {e}")
+            
+            # Method 4: Add Epic link via comment (fallback)
+            try:
+                epic_comment = f"🔗 This task is part of Epic: {epic_key} (GitHub Contributions - {repo_owner})"
+                comment_payload = {"body": epic_comment}
+                comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
+                
+                response = requests.post(comment_url, headers=headers, json=comment_payload, timeout=30)
+                
+                if response.status_code in [200, 201]:
+                    print(f"    ✅ Epic reference added via comment as fallback")
+                    return True
+            except Exception as e:
+                print(f"    ⚠️  Failed to add Epic reference via comment: {e}")
+            
+            print(f"    ❌ All Epic attachment methods failed")
+            return False
+            
+        except Exception as e:
+            print(f"    ❌ Error in post-creation Epic attachment: {e}")
+            return False
+    
+    def run_core_workflow(self, max_pages: int = 10, since_minutes: int = None, dry_run: bool = False) -> Dict:
+        """
+        CORE WORKFLOW: Implements your requested process:
+        1. Get all data from GitHub and group by owner/repo/issue
+        2. Analyze status for each grouped item
+        3. Create JIRA objects (Epics + Tasks) 
+        4. Then handle comments (separate step)
+        """
+        print("🚀 === STARTING CORE WORKFLOW ===")
+        print(f"Max Pages: {max_pages}")
+        print(f"Since Minutes: {since_minutes or 'All time'}")
+        print(f"Dry Run: {dry_run}")
+        print(f"Timestamp: {datetime.now()}")
+        
+        workflow_stats = {
+            'start_time': datetime.now(),
+            'data_gathering': {},
+            'jira_creation': {},
+            'total_time': None
+        }
+        
+        try:
+            # STEP 1: GATHER AND GROUP ALL GITHUB DATA
+            print("\n" + "="*60)
+            print("STEP 1: GATHER AND GROUP GITHUB DATA")
+            print("="*60)
+            
+            data_result = self.gather_and_group_github_data(max_pages=max_pages, since_minutes=since_minutes)
+            grouped_data = data_result['grouped_data']
+            workflow_stats['data_gathering'] = data_result['summary']
+            
+            if not grouped_data:
+                print("⚠️  No data found to process")
+                return workflow_stats
+            
+            # STEP 2: CREATE JIRA OBJECTS FROM GROUPED DATA
+            print("\n" + "="*60)
+            print("STEP 2: CREATE JIRA OBJECTS")
+            print("="*60)
+            
+            jira_stats = self.create_jira_objects_from_grouped_data(grouped_data, dry_run=dry_run)
+            workflow_stats['jira_creation'] = jira_stats
+            
+            # STEP 3: SUMMARY
+            workflow_stats['end_time'] = datetime.now()
+            workflow_stats['total_time'] = (workflow_stats['end_time'] - workflow_stats['start_time']).total_seconds()
+            
+            print("\n" + "="*60)
+            print("CORE WORKFLOW COMPLETED")
+            print("="*60)
+            print(f"⏱️  Total Time: {workflow_stats['total_time']:.2f} seconds")
+            print(f"📊 Repositories Processed: {workflow_stats['data_gathering']['total_repos']}")
+            print(f"🎫 Issues Analyzed: {workflow_stats['data_gathering']['total_issues']}")
+            print(f"📋 Epics Created: {workflow_stats['jira_creation']['epics_created']}")
+            print(f"🎯 Tasks Created: {workflow_stats['jira_creation']['tasks_created']}")
+            print(f"🔄 Tasks Updated: {workflow_stats['jira_creation']['tasks_updated']}")
+            print(f"❌ Errors: {workflow_stats['jira_creation']['errors']}")
+            
+            print(f"\n📈 Status Distribution:")
+            for status, count in workflow_stats['data_gathering']['status_counts'].items():
+                print(f"  {status}: {count}")
+            
+            return workflow_stats
+            
+        except Exception as e:
+            print(f"❌ CORE WORKFLOW ERROR: {e}")
+            workflow_stats['error'] = str(e)
+            return workflow_stats
     # All methods and their bodies below this line must be indented by 4 spaces (one level) under this class
     # ...existing code indented by 4 spaces...
 
@@ -674,12 +1708,22 @@ class GitHubJIRAMonitor:
         """Search for existing JIRA task with this GitHub issue URL in the description (deduplication by URL)"""
         try:
             headers = self.get_jira_headers()
-            # Use the GitHub issue URL as a unique identifier in the description
-            jql = f'project = "{self.jira_project}" AND description ~ "{issue_url}"'
+            
+            # Escape special characters in the issue URL for JQL search
+            # This fixes the 400 error caused by unescaped special characters
+            # Only escape characters that actually need escaping in JQL: quotes and backslashes
+            escaped_url = issue_url.replace('\\', '\\\\').replace('"', '\\"')
+            
+            # Use the escaped GitHub issue URL as a unique identifier in the description
+            jql = f'project = "{self.jira_project}" AND description ~ "{escaped_url}"'
             url = f"https://{self.jira_domain}/rest/api/2/search"
             params = {'jql': jql, 'maxResults': 5}
+            
             print(f"🔍 Searching for existing task with GitHub issue URL: {issue_url}")
+            print(f"🔍 Escaped JQL query: {jql}")
+            
             response = requests.get(url, headers=headers, params=params, timeout=10)
+            
             if response.status_code == 200:
                 result = response.json()
                 print(f"📊 Found {result.get('total', 0)} potential matches by URL")
@@ -689,9 +1733,12 @@ class GitHubJIRAMonitor:
                         if issue_url.lower() in (desc or '').lower():
                             print(f"✅ Found existing JIRA task: {issue['key']} for URL {issue_url}")
                             return issue['key']
-                print(f"❌ No exact match found for issue URL: {issue_url}")
+                    print(f"📝 No exact URL match found in descriptions")
+                else:
+                    print(f"📝 No tasks found with URL in description")
             else:
-                print(f"⚠️  JIRA search failed: {response.status_code}")
+                print(f"⚠️  JIRA search failed: {response.status_code} - {response.text[:200]}")
+                
             return None
         except Exception as e:
             print(f"⚠️  Error searching JIRA: {e}")
@@ -1349,7 +2396,7 @@ class GitHubJIRAMonitor:
         if pr_merged:
             description_prefix = "✅ MERGED Pull Request"
         elif pr_state == 'closed':
-            description_prefix = "📝 CLOSED Pull Request"
+            description_prefix = "💥 BUILD BROKEN Pull Request"
         elif pr_state == 'open':
             description_prefix = "🔄 OPEN Pull Request"
         else:
@@ -1930,26 +2977,44 @@ Original Date: {comment_date}"""
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="GitHub-JIRA Monitor/Migration Tool")
-    parser.add_argument('mode', choices=['monitor', 'migrate'], help='Run in monitor or migrate mode')
-    parser.add_argument('--since', type=int, default=15, help='Minutes to look back for monitor mode')
+    parser.add_argument('mode', choices=['monitor', 'migrate', 'core'], 
+                       help='Run mode: monitor (real-time), migrate (historical), core (new workflow)')
+    parser.add_argument('--since', type=int, default=15, help='Minutes to look back for monitor/core mode')
     parser.add_argument('--dry-run', action='store_true', help='Dry run (no JIRA changes)')
-    parser.add_argument('--max-pages', type=int, default=10, help='Max pages to fetch per repo for migration')
+    parser.add_argument('--max-pages', type=int, default=10, help='Max pages to fetch per repo')
     parser.add_argument('--limit-per-repo', type=int, default=0, help='Limit PRs per repo (0 = no limit)')
     parser.add_argument('--repos', nargs='*', help='Target repositories for migration (owner/repo format)')
     args = parser.parse_args()
 
     monitor = GitHubJIRAMonitor()
 
-if args.mode == 'monitor':
-    monitor.run_monitor(since_minutes=args.since, dry_run=args.dry_run)
-elif args.mode == 'migrate':
-    target_repos = args.repos if args.repos else None
-    stats = monitor.run_full_migration(
-        target_repos=target_repos,
-        max_pages=args.max_pages,
-        limit_per_repo=args.limit_per_repo,
-        dry_run=args.dry_run
-    )
-    print("\n=== Migration Summary ===")
-    for k, v in stats.items():
-        print(f"{k.title()}: {v}")
+    if args.mode == 'monitor':
+        monitor.run_monitor(since_minutes=args.since, dry_run=args.dry_run)
+    elif args.mode == 'migrate':
+        target_repos = args.repos if args.repos else None
+        stats = monitor.run_full_migration(
+            target_repos=target_repos,
+            max_pages=args.max_pages,
+            limit_per_repo=args.limit_per_repo,
+            dry_run=args.dry_run
+        )
+        print("\n=== Migration Summary ===")
+        for k, v in stats.items():
+            print(f"{k.title()}: {v}")
+    elif args.mode == 'core':
+        # NEW CORE WORKFLOW MODE
+        print("🚀 Running CORE WORKFLOW as requested")
+        print("This implements: gather all GitHub data → group by owner/repo/issue → analyze status → create JIRA objects")
+        
+        stats = monitor.run_core_workflow(
+            max_pages=args.max_pages,
+            since_minutes=args.since if args.since != 15 else None,  # None = all time if default
+            dry_run=args.dry_run
+        )
+        
+        if 'error' in stats:
+            print(f"\n❌ Workflow failed: {stats['error']}")
+            sys.exit(1)
+        else:
+            print(f"\n✅ Core workflow completed successfully!")
+            sys.exit(0)

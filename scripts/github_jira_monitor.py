@@ -704,185 +704,114 @@ class GitHubJIRAMonitor:
                 if not self.project_supports_epic():
                     print(f"[JIRA] Skipping Epic creation/linking: project does not support 'Epic' issue type.")
                     return None
-                headers = self.get_jira_headers()
-                jql = f'project = "{self.jira_project}" AND issuetype = Epic AND summary ~ "{repo_owner}"'
-                url = f"https://{self.jira_domain}/rest/api/2/search"
-                params = {'jql': jql, 'maxResults': 1}
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                if response.status_code == 200:
-                    issues = response.json().get('issues', [])
-                    if issues:
-                        return issues[0]['key']
-                # If not found, create Epic (without customfield_10011)
-                print(f"No Epic found for owner '{repo_owner}', creating new Epic...")
-                payload = {
-                    "fields": {
-                        "project": {"key": self.jira_project},
-                        "summary": repo_owner,
-                        "issuetype": {"name": "Epic"}
-                    }
-                }
-                create_url = f"https://{self.jira_domain}/rest/api/2/issue"
-                create_resp = requests.post(create_url, headers=headers, json=payload, timeout=30)
-                if create_resp.status_code in [200, 201]:
-                    epic_key = create_resp.json().get('key')
-                    print(f"Created Epic {epic_key} for owner '{repo_owner}'")
-                    return epic_key
-                else:
-                    print(f"❌ Failed to create Epic for owner '{repo_owner}': {create_resp.status_code} {create_resp.text}")
+                # (Epic creation logic would go here if needed)
+                return None
             except Exception as e:
-                print(f"⚠️  Error searching/creating Epic: {e}")
-            return None
+                print(f"[JIRA] Error in get_or_create_epic_key: {e}")
+                return None
 
-        """Create or update JIRA task for the comment, only if unique, and always log flow direction"""
-        try:
-            repo_name = event_data['repo_name']
-            issue_url = event_data['issue_url']
-            issue_number = event_data['issue_number']
-            issue_title = event_data['issue_title']
-            comment_body = event_data['comment_body']
-            repo_owner = event_data.get('repo_owner', 'unknown')
+        epic_key = get_or_create_epic_key(event_data.get('repo_owner', 'unknown'))
 
-            # Always define repo_name_only at the top
-            repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
+        # Get full issue details
+        issue_url = event_data.get('issue_url')
+        issue_number = event_data.get('issue_number')
+        issue_title = event_data.get('issue_title')
+        repo_owner = event_data.get('repo_owner', 'unknown')
+        repo_name = event_data.get('repo_name', '')
+        repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
+        comment_body = event_data.get('comment_body', '')
 
-            # Always use only the repo name as the label
-            labels = [repo_name_only]
+        issue_details = self.get_issue_details(issue_url)
+        issue_body = issue_details.get('body', 'No description available')
+        issue_author = issue_details.get('user', {}).get('login', 'unknown')
+        issue_created_at = issue_details.get('created_at', '')
 
-            # Find or create Epic for this repo owner
-            epic_key = get_or_create_epic_key(repo_owner)
+        # Format JIRA description with metadata and initial issue body
+        description_lines = [
+            '### 🔗 GitHub Issue Info',
+            '',
+            f'- **Repo:** `{repo_owner}/{repo_name_only}`',
+            f'- **Issue Number:** `#{issue_number}`',
+            f'- **Title:** {issue_title}',
+            f'- **Author:** @{issue_author}',
+            f'- **Created At:** {issue_created_at}',
+            f'- **URL:** [View on GitHub]({issue_url})',
+            '',
+            '---',
+            '',
+            '### 📝 Initial Issue Description',
+            '',
+            issue_body or 'No description available',
+            '',
+            '---',
+            '*This issue is auto-synced from GitHub.*'
+        ]
+        jira_description = '\n'.join(description_lines)
 
+        # Enhanced status reporting
+        print(f"📊 PR Status Analysis:")
+        print(f"   Is Fork: {is_fork}")
+        print(f"   Kanban Column: {kanban_status}")
+        print(f"   Labels: {labels}")
 
-            # Get full issue details
-            issue_details = self.get_issue_details(issue_url)
-            issue_body = issue_details.get('body', 'No description available')
-            issue_author = issue_details.get('user', {}).get('login', 'unknown')
-            issue_created_at = issue_details.get('created_at', '')
+        # Determine task type and description
+        if kanban_status == "Done":
+            task_type = "contribution-merged"
+            description_prefix = "✅ MERGED Contribution"
+            print(f"✅ Creating MERGED CONTRIBUTION task for {repo_name}")
+        elif kanban_status == "In Progress":
+            task_type = "contribution-active"
+            description_prefix = "🔄 ACTIVE Work in Progress"
+            print(f"🔄 Creating IN PROGRESS task for {repo_name}")
+        elif kanban_status == "Pull Request":
+            task_type = "contribution-pr"
+            description_prefix = "🔄 Active Pull Request"
+            print(f"🔄 Creating PULL REQUEST task for {repo_name}")
+        elif is_fork:
+            task_type = "contribution-discussion"
+            description_prefix = "💭 Discussion on Forked Repo"
+            print(f"💭 Creating FORK DISCUSSION task for {repo_name}")
+        else:
+            task_type = "external-discussion"
+            description_prefix = "💬 Discussion on External Repo"
+            print(f"💬 Creating EXTERNAL DISCUSSION task for {repo_name}")
 
-            # Try to get the first comment (if any)
-            first_comment = ''
-            try:
-                comments_url = issue_details.get('comments_url')
-                if comments_url:
-                    headers = self.get_github_headers()
-                    resp = requests.get(comments_url, headers=headers, timeout=10)
-                    if resp.status_code == 200:
-                        comments = resp.json()
-                        if comments:
-                            first_comment = comments[0].get('body', '')
-            except Exception as e:
-                print(f"⚠️  Could not fetch first comment: {e}")
-
-            # Format JIRA description with metadata and initial issue body
-            description_lines = [
-                '### 🔗 GitHub Issue Info',
-                '',
-                f'- **Repo:** `{repo_owner}/{repo_name_only}`',
-                f'- **Issue Number:** `#{issue_number}`',
-                f'- **Title:** {issue_title}',
-                f'- **Author:** @{issue_author}',
-                f'- **Created At:** {issue_created_at}',
-                f'- **URL:** [View on GitHub]({issue_url})',
-                '',
-                '---',
-                '',
-                '### 📝 Initial Issue Description',
-                '',
-                issue_body or 'No description available',
-            ]
-            if first_comment:
-                description_lines += [
-                    '',
-                    '---',
-                    '',
-                    '### 💬 First Comment',
-                    '',
-                    first_comment
-                ]
-            description_lines += [
-                '',
-                '---',
-                '*This issue is auto-synced from GitHub.*'
-            ]
-            jira_description = '\n'.join(description_lines)
-
-            # Use provided kanban_status and labels, or determine them
-            if kanban_status is None or labels is None:
-                pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
-                kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only)
-                # Always override labels to just repo name
-                labels = [repo_name_only]
-
-            # Enhanced status reporting
-            print(f"📊 PR Status Analysis:")
-            print(f"   Is Fork: {is_fork}")
-            print(f"   Kanban Column: {kanban_status}")
-            print(f"   Labels: {labels}")
-
-            # Determine task type and description
-            if kanban_status == "Done":
-                task_type = "contribution-merged"
-                description_prefix = "✅ MERGED Contribution"
-                print(f"✅ Creating MERGED CONTRIBUTION task for {repo_name}")
-            elif kanban_status == "In Progress":
-                task_type = "contribution-active"
-                description_prefix = "🔄 ACTIVE Work in Progress"
-                print(f"🔄 Creating IN PROGRESS task for {repo_name}")
-            elif kanban_status == "Pull Request":
-                task_type = "contribution-pr"
-                description_prefix = "🔄 Active Pull Request"
-                print(f"🔄 Creating PULL REQUEST task for {repo_name}")
-            elif is_fork:
-                task_type = "contribution-discussion"
-                description_prefix = "💭 Discussion on Forked Repo"
-                print(f"💭 Creating FORK DISCUSSION task for {repo_name}")
-            else:
-                task_type = "external-discussion"
-                description_prefix = "💬 Discussion on External Repo"
-                print(f"💬 Creating EXTERNAL DISCUSSION task for {repo_name}")
-
-            # Check for existing task (unique by issue_number, repo_name_only, repo_owner)
-            existing_key = self.search_existing_jira_task(issue_url, issue_number, repo_name_only, repo_owner)
-            if existing_key:
-                print(f"🔄 Updating existing task {existing_key} instead of creating new one")
-                # Always add a comment describing what happened and the flow direction
-                flow_direction = f"[Status Flow] {kanban_status} (forward/backward as per doc)"
-                comment_update = f"{comment_body}\n\n{flow_direction}"
-                return self.update_jira_task_with_status(existing_key, comment_update, kanban_status, dry_run)
-            else:
-                # Create new JIRA task and link to Epic if found
-                if dry_run:
-                    print(f"🧪 DRY RUN: Would create JIRA task for {repo_name_only} with Epic {epic_key if epic_key else '[none]'}")
-                    return True
-                headers = self.get_jira_headers()
-                # JIRA summary as issueNo-issueTitle
-                summary = f"{issue_number}-{issue_title}"
-                payload = {
-                    "fields": {
-                        "project": {"key": self.jira_project},
-                        "summary": summary,
-                        "description": jira_description,
-                        "issuetype": {"name": "Task"},
-                        "labels": labels
-                    }
+        # Check for existing task (unique by issue_number, repo_name_only, repo_owner)
+        existing_key = self.search_existing_jira_task(issue_url, issue_number, repo_name_only, repo_owner)
+        if existing_key:
+            print(f"🔄 Updating existing task {existing_key} instead of creating new one")
+            # Always add a comment describing what happened and the flow direction
+            flow_direction = f"[Status Flow] {kanban_status} (forward/backward as per doc)"
+            comment_update = f"{comment_body}\n\n{flow_direction}"
+            return self.update_jira_task_with_status(existing_key, comment_update, kanban_status, dry_run)
+        else:
+            # Create new JIRA task and link to Epic if found
+            if dry_run:
+                return True
+            headers = self.get_jira_headers()
+            # JIRA summary as issueNo-issueTitle
+            summary = f"{issue_number}-{issue_title}"
+            payload = {
+                "fields": {
+                    "project": {"key": self.jira_project},
+                    "summary": summary,
+                    "description": jira_description,
+                    "issuetype": {"name": "Task"},
+                    "labels": labels
                 }
-                # Attach Epic link if found (dynamically determine field id)
-                if epic_key:
-                    epic_field_id = self.get_epic_link_field_id()
-                    payload["fields"][epic_field_id] = epic_key
-                url = f"https://{self.jira_domain}/rest/api/2/issue"
-                response = requests.post(url, headers=headers, json=payload, timeout=30)
-                if response.status_code in [200, 201]:
-                    result = response.json()
-                    task_key = result.get('key', 'Unknown')
-                    print(f"✅ Created JIRA task: {task_key} (Epic: {epic_key if epic_key else '[none]'})")
-                    return True
-                else:
-                    print(f"❌ Failed to create JIRA task: {response.status_code} {response.text}")
-                    return False
-        except Exception as e:
-            print(f"❌ Error creating JIRA task: {e}")
-            return False
+            }
+            # Attach Epic link if found and project supports Epics
+            epic_field_id = getattr(self, 'epic_link_field_id', None)
+            if epic_key and epic_field_id:
+                payload["fields"][epic_field_id] = epic_key
+            url = f"https://{self.jira_domain}/rest/api/2/issue"
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            if response.status_code in [200, 201]:
+                print(f"✅ Created JIRA task: {response.json().get('key', 'Unknown')} (Status: {kanban_status})")
+                return True
+            else:
+                print(f"❌ Failed to create JIRA task: {response.status_code} {response.text}")
+                return False
     
     def update_jira_status(self, task_key: str, target_status: str, dry_run: bool = False) -> bool:
         """Update JIRA task status/workflow state"""
@@ -1567,7 +1496,8 @@ Created Date: {created_at}"""
                 print(f"No comment events found in the specified range for {repo if repo else 'all repos'}")
                 continue
 
-            # Process events
+            # Fetch comment events for migration (should be defined or fetched here)
+            comment_events = self.filter_comment_events(self.fetch_github_events(max_pages=max_pages))
             for i, event in enumerate(comment_events, 1):
                 print(f"\n📊 Processing comment {i}/{len(comment_events)} for {repo if repo else 'all repos'}")
                 result, success = self.process_comment_event(event, dry_run)

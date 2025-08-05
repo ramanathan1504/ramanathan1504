@@ -470,14 +470,112 @@ class GitHubJIRAMonitor:
             print(f"    ❌ Error analyzing PR status for issue #{issue_num}: {e}")
             return pr_info
     
+    def _detect_backward_flow_triggers(self, issue_data: Dict, pr_info: Dict) -> Tuple[bool, str, List[str]]:
+        """
+        Detect backward flow triggers from STATUS_FLOW_PROPOSAL.md:
+        1. Comment on open PR → IN PROGRESS
+        2. @mention on open PR → IN PROGRESS  
+        3. PR review comment → IN PROGRESS
+        4. Push to PR branch → PULL REQUEST
+        
+        Returns: (has_backward_trigger, backward_status, reasons)
+        """
+        if not pr_info.get('pr_state') == 'open':
+            return False, None, []
+            
+        backward_reasons = []
+        events = issue_data.get('events', [])
+        
+        # Check for backward flow triggers on open PR
+        for event in events:
+            event_type = event.get('type', '')
+            payload = event.get('payload', {})
+            
+            # 1. Comment on open PR → IN PROGRESS
+            if event_type == 'IssueCommentEvent':
+                issue = payload.get('issue', {})
+                if issue.get('pull_request'):  # This is a PR comment
+                    backward_reasons.append("Comment on open PR")
+                    return True, 'IN PROGRESS', backward_reasons
+            
+            # 2. @mention on open PR → IN PROGRESS
+            if event_type in ['IssueCommentEvent', 'PullRequestReviewCommentEvent']:
+                comment_body = payload.get('comment', {}).get('body', '')
+                if f'@{self.github_user}' in comment_body:
+                    # Check if this comment is on the open PR
+                    if event_type == 'IssueCommentEvent':
+                        issue = payload.get('issue', {})
+                        if issue.get('pull_request'):
+                            backward_reasons.append("@mention on open PR")
+                            return True, 'IN PROGRESS', backward_reasons
+                    else:  # PullRequestReviewCommentEvent
+                        backward_reasons.append("@mention in PR review")
+                        return True, 'IN PROGRESS', backward_reasons
+            
+            # 3. PR review comment → IN PROGRESS
+            if event_type == 'PullRequestReviewCommentEvent':
+                backward_reasons.append("PR review comment received")
+                return True, 'IN PROGRESS', backward_reasons
+            
+            # 4. Push to PR branch → PULL REQUEST (check if push is to PR branch)
+            if event_type == 'PushEvent':
+                push_ref = payload.get('ref', '')
+                pr_branch = pr_info.get('pr_branch', '')
+                if pr_branch and push_ref.endswith(pr_branch):
+                    backward_reasons.append("Push to PR branch")
+                    return True, 'PULL REQUEST', backward_reasons
+        
+        return False, None, []
+    
+    def _is_event_on_open_pr(self, event: Dict, pr_info: Dict) -> bool:
+        """
+        Check if an event is happening on the open PR itself
+        This helps distinguish PR activity from general issue activity
+        """
+        if not pr_info.get('pr_state') == 'open':
+            return False
+            
+        event_type = event.get('type', '')
+        payload = event.get('payload', {})
+        
+        # For IssueCommentEvent, check if it's actually on a PR
+        if event_type == 'IssueCommentEvent':
+            issue = payload.get('issue', {})
+            if issue.get('pull_request'):
+                # Check if this is the same PR number
+                issue_number = issue.get('number')
+                return issue_number == pr_info.get('pr_number')
+        
+        # PullRequestReviewCommentEvent is always on a PR
+        if event_type == 'PullRequestReviewCommentEvent':
+            pr = payload.get('pull_request', {})
+            pr_number = pr.get('number')
+            return pr_number == pr_info.get('pr_number')
+        
+        # For PushEvent, check if it's to the PR branch
+        if event_type == 'PushEvent':
+            push_ref = payload.get('ref', '')
+            pr_branch = pr_info.get('pr_branch', '')
+            if pr_branch and push_ref.endswith(pr_branch):
+                return True
+        
+        return False
+    
     def _determine_final_status(self, issue_data: Dict, pr_info: Dict) -> Tuple[str, List[str]]:
         """
         Determine final status using STATUS_FLOW_PROPOSAL.md priority logic:
+        BACKWARD FLOW (highest priority after MERGED):
+        - Comment on open PR → IN PROGRESS
+        - @mention on open PR → IN PROGRESS  
+        - PR review comment → IN PROGRESS
+        - Push to PR branch → PULL REQUEST
+        
+        FORWARD FLOW:
         1. MERGED (highest priority) → DONE
         2. RELEASED → RELEASED  
         3. OPEN PR + ACTIVITY → IN PROGRESS
         4. OPEN PR → PULL REQUEST
-        5. CLOSED PR (not merged) → PULL REQUEST
+        5. CLOSED PR (not merged) → BUILD BROKEN
         6. COMMITS ON BRANCH → IN PROGRESS
         7. BRANCH CREATED → TODO
         8. COMMENT ONLY → DISCUSSION
@@ -489,7 +587,12 @@ class GitHubJIRAMonitor:
             reasons.append("PR merged")
             return 'DONE', reasons
         
-        # 2. RELEASED → RELEASED (would need release detection - placeholder for now)
+        # 2. BACKWARD FLOW DETECTION (second highest priority)
+        has_backward, backward_status, backward_reasons = self._detect_backward_flow_triggers(issue_data, pr_info)
+        if has_backward:
+            return backward_status, backward_reasons
+        
+        # 3. RELEASED → RELEASED (would need release detection - placeholder for now)
         # TODO: Implement release detection logic
         
         # 3. OPEN PR + ACTIVITY → IN PROGRESS

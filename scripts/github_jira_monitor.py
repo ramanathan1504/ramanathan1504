@@ -663,31 +663,25 @@ class GitHubJIRAMonitor:
             return {}
     
     def search_existing_jira_task(self, issue_url: str, issue_number: int, repo_name: str, repo_owner: str = None) -> Optional[str]:
-        """Search for existing JIRA task with this GitHub issue (repo + issue number + owner)"""
+        """Search for existing JIRA task with this GitHub issue URL in the description (deduplication by URL)"""
         try:
             headers = self.get_jira_headers()
-            repo_name_only = repo_name.split('/')[-1] if '/' in repo_name else repo_name
-            # Use owner if provided, else try to extract from repo_name
-            owner = repo_owner or (repo_name.split('/')[0] if '/' in repo_name else None)
-            # Search by exact issue number, repo name, and owner in summary/labels
-            jql = f'project = "{self.jira_project}" AND summary ~ "{issue_number}" AND labels = "{repo_name_only}"'
-            if owner:
-                jql += f' AND labels = "{owner}"'
+            # Use the GitHub issue URL as a unique identifier in the description
+            jql = f'project = "{self.jira_project}" AND description ~ "{issue_url}"'
             url = f"https://{self.jira_domain}/rest/api/2/search"
-            params = {'jql': jql, 'maxResults': 20}
-            print(f"🔍 Searching for existing task with issue #{issue_number} in {repo_name_only} (owner: {owner})")
+            params = {'jql': jql, 'maxResults': 5}
+            print(f"🔍 Searching for existing task with GitHub issue URL: {issue_url}")
             response = requests.get(url, headers=headers, params=params, timeout=10)
             if response.status_code == 200:
                 result = response.json()
-                print(f"📊 Found {result.get('total', 0)} potential matches")
+                print(f"📊 Found {result.get('total', 0)} potential matches by URL")
                 if result.get('total', 0) > 0:
                     for issue in result.get('issues', []):
-                        fields = issue.get('fields', {})
-                        summary = fields.get('summary', '')
-                        labels = fields.get('labels', [])
-                        if str(issue_number) in summary and repo_name_only in labels and (not owner or owner in labels):
-                            return issue.get('key')
-                print(f"❌ No exact match found for issue #{issue_number} in {repo_name_only} (owner: {owner})")
+                        desc = issue.get('fields', {}).get('description', '')
+                        if issue_url.lower() in (desc or '').lower():
+                            print(f"✅ Found existing JIRA task: {issue['key']} for URL {issue_url}")
+                            return issue['key']
+                print(f"❌ No exact match found for issue URL: {issue_url}")
             else:
                 print(f"⚠️  JIRA search failed: {response.status_code}")
             return None

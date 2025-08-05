@@ -55,7 +55,15 @@ class GitHubJIRAMonitor:
         return self._epic_link_field_id
     def post_action_log_to_jira(self, jira_key: str, action_type: str, action_detail: str, actor: str, timestamp: str, dry_run: bool = False) -> bool:
         """Post an action log comment to the JIRA issue using the provided template."""
-        jira_comment = f"#### ⚙️ Action Log\n\n- **{action_type}**: {action_detail}\n- **Triggered By**: @{actor}\n- **Time**: {timestamp}\n\n---"
+        jira_comment = (
+            "ACTION LOG\n"
+            "-----------\n"
+            f"Action: {action_type}\n"
+            f"Detail: {action_detail}\n"
+            f"Triggered By: @{actor}\n"
+            f"Time: {timestamp}\n"
+            "-----------"
+        )
         if dry_run:
             print(f"🧪 DRY RUN: Would add action log to JIRA task {jira_key}:")
             print(jira_comment)
@@ -720,25 +728,23 @@ class GitHubJIRAMonitor:
         issue_author = issue_details.get('user', {}).get('login', 'unknown')
         issue_created_at = issue_details.get('created_at', '')
 
-        # Format JIRA description with metadata and initial issue body
+        # Format JIRA description with plain text and simple lists for better JIRA rendering
         description_lines = [
-            '### 🔗 GitHub Issue Info',
+            'GITHUB ISSUE INFO',
+            '-----------------',
+            f"- Repo: {repo_owner}/{repo_name_only}",
+            f"- Issue Number: #{issue_number}",
+            f"- Title: {issue_title}",
+            f"- Author: @{issue_author}",
+            f"- Created At: {issue_created_at}",
+            f"- URL: {issue_url}",
             '',
-            f'- **Repo:** `{repo_owner}/{repo_name_only}`',
-            f'- **Issue Number:** `#{issue_number}`',
-            f'- **Title:** {issue_title}',
-            f'- **Author:** @{issue_author}',
-            f'- **Created At:** {issue_created_at}',
-            f'- **URL:** [View on GitHub]({issue_url})',
+            'INITIAL ISSUE DESCRIPTION',
+            '-------------------------',
+            (issue_body or 'No description available'),
             '',
-            '---',
-            '',
-            '### 📝 Initial Issue Description',
-            '',
-            issue_body or 'No description available',
-            '',
-            '---',
-            '*This issue is auto-synced from GitHub.*'
+            '-------------------------',
+            'This issue is auto-synced from GitHub.'
         ]
         jira_description = '\n'.join(description_lines)
 
@@ -1059,13 +1065,30 @@ class GitHubJIRAMonitor:
                 comment_author = comment.get('user', {}).get('login', 'unknown')
                 comment_created_at = comment.get('created_at', '')
                 pr_link = pr_url or issue_url
-                jira_comment = f"#### 💬 GitHub PR Review Comment by @{comment_author} on {comment_created_at}:\n{comment_body}\n\n[🔗 View PR]({pr_link})\n---"
+                jira_comment = (
+                    f"GITHUB PR REVIEW COMMENT\n"
+                    f"------------------------\n"
+                    f"Author: @{comment_author}\n"
+                    f"Date: {comment_created_at}\n"
+                    f"PR: {pr_link}\n"
+                    f"Comment: {comment_body}\n"
+                    f"Comment URL: {comment_url}\n"
+                    f"------------------------"
+                )
             else:
                 # Issue comment event
                 comment_url = comment.get('html_url', '')
                 comment_author = comment.get('user', {}).get('login', 'unknown')
                 comment_created_at = comment.get('created_at', '')
-                jira_comment = f"#### 💬 GitHub Comment by @{comment_author} on {comment_created_at}:\n{comment_body}\n\n[🔗 View comment]({comment_url})\n---"
+                jira_comment = (
+                    f"GITHUB ISSUE COMMENT\n"
+                    f"-------------------\n"
+                    f"Author: @{comment_author}\n"
+                    f"Date: {comment_created_at}\n"
+                    f"Comment: {comment_body}\n"
+                    f"Comment URL: {comment_url}\n"
+                    f"-------------------"
+                )
 
             if dry_run:
                 print(f"🧪 DRY RUN: Would add comment to JIRA task {jira_key}:")

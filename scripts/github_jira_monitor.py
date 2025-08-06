@@ -28,6 +28,10 @@ class GitHubJIRAMonitor:
             if not epic_link_field:
                 print(f"    ❌ Could not find Epic Link field ID for project {self.jira_project}")
                 return False
+            # Extra debug: print which field is being used
+            print(f"    [DEBUG] Using Epic Link field: {epic_link_field}")
+            if epic_link_field == 'customfield_10011':
+                print(f"    [WARNING] Attempting to use 'Epic Name' field (customfield_10011) for Task. This is incorrect. You must use the 'Epic Link' field (usually customfield_10014 or similar) for Task-to-Epic relationships.")
             url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
             headers = self.get_jira_headers()
             payload = {"fields": {epic_link_field: epic_key}}
@@ -117,7 +121,7 @@ class GitHubJIRAMonitor:
             print(f"[JIRA] Error checking project issue types: {e}")
         return False
     def get_epic_link_field_id(self) -> str:
-        """Dynamically find the custom field ID for 'Epic Link' in JIRA and cache it."""
+        """Dynamically find the custom field ID for 'Epic Link' in JIRA and cache it. Only returns true Epic Link fields, never Epic Name."""
         if hasattr(self, '_epic_link_field_id') and self._epic_link_field_id:
             return self._epic_link_field_id
         try:
@@ -126,28 +130,24 @@ class GitHubJIRAMonitor:
             resp = requests.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
                 fields = resp.json()
-                
-                # Look for Epic Link field with different possible names
-                epic_link_candidates = ['Epic Link', 'Epic', 'Parent Epic', 'Epic Name']
-                
+                # Only consider fields with 'Epic Link' in the name or id, never 'Epic Name'
                 for field in fields:
                     field_name = field.get('name', '').strip()
                     field_id = field.get('id', '')
-                    
-                    # Check for exact matches first
-                    if field_name in epic_link_candidates:
+                    # Only match 'Epic Link' (not 'Epic Name')
+                    if field_name.lower() == 'epic link' or ('epic' in field_name.lower() and 'link' in field_name.lower()):
+                        if 'name' in field and field['name'].lower() == 'epic name':
+                            continue
                         self._epic_link_field_id = field_id
                         print(f"[JIRA] Found Epic Link field: '{field_name}' -> {field_id}")
                         return self._epic_link_field_id
-                    
-                    # Check for partial matches
-                    if 'epic' in field_name.lower() and 'link' in field_name.lower():
+                    # Also allow id-based match for legacy JIRA (e.g. customfield_10014)
+                    if 'epic' in field_id.lower() and 'link' in field_id.lower():
                         self._epic_link_field_id = field_id
-                        print(f"[JIRA] Found Epic Link field (partial match): '{field_name}' -> {field_id}")
+                        print(f"[JIRA] Found Epic Link field by id: '{field_name}' -> {field_id}")
                         return self._epic_link_field_id
-                
-                # If no Epic Link field found, return None
-                pass
+                print("[JIRA] No valid Epic Link field found (only 'Epic Name' or none present). Please check your JIRA configuration.")
+                return None
         except Exception as e:
             print(f"❌ Error processing specific issue: {e}")
             return None

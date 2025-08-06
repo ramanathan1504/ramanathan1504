@@ -21,6 +21,91 @@ load_dotenv()
 
 
 class GitHubJIRAMonitor:
+    def search_existing_jira_task(self, issue_url: str, issue_number: int, repo_name: str, repo_owner: str = None) -> Optional[str]:
+        """Search for existing JIRA task with this GitHub issue URL in the description (deduplication by URL, repo, and issue number)"""
+        try:
+            headers = self.get_jira_headers()
+            # Escape special characters in the issue URL for JQL search
+            escaped_url = issue_url.replace('\\', '\\\\').replace('"', '\\"')
+            # Use the escaped GitHub issue URL as a unique identifier in the description
+            jql = f'project = "{self.jira_project}" AND description ~ "{escaped_url}" AND summary ~ "{issue_number}"'
+            url = f"https://{self.jira_domain}/rest/api/2/search"
+            params = {'jql': jql, 'maxResults': 10}
+            print(f"🔍 [Deduplication] Searching for existing task with GitHub issue URL: {issue_url}")
+            print(f"🔍 [Deduplication] JQL: {jql}")
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            if response.status_code == 200:
+                result = response.json()
+                print(f"📊 [Deduplication] Found {result.get('total', 0)} potential matches by URL/issue number")
+                if result.get('total', 0) > 0:
+                    for issue in result.get('issues', []):
+                        desc = issue.get('fields', {}).get('description', '')
+                        summary = issue.get('fields', {}).get('summary', '')
+                        # Check both URL and issue number in summary for extra safety
+                        if (issue_url.lower() in (desc or '').lower()):
+                            # Check for summary pattern: '#issue_number' and repo_owner/repo_name
+                            summary_lower = summary.lower()
+                            repo_owner_match = repo_owner.lower() if repo_owner else ''
+                            repo_name_match = repo_name.lower() if repo_name else ''
+                            if (
+                                f"#{issue_number}" in summary_lower and
+                                (repo_owner_match in summary_lower or repo_owner_match in desc.lower()) and
+                                (repo_name_match in summary_lower or repo_name_match in desc.lower())
+                            ):
+                                print(f"✅ [Deduplication] Exact match found: {issue['key']}")
+                                return issue['key']
+                    print(f"📝 [Deduplication] No exact URL+issue+repo match found in descriptions/summaries")
+                else:
+                    print(f"📝 [Deduplication] No tasks found with URL+issue in description/summary")
+            else:
+                print(f"⚠️  [Deduplication] JIRA search failed: {response.status_code} - {response.text[:200]}")
+            return None
+        except Exception as e:
+            print(f"⚠️  [Deduplication] Error searching JIRA: {e}")
+            return None
+
+    def _create_activity_log_from_events(self, events):
+        """Create a simple GitHub activity timeline from a list of events for JIRA description/logging."""
+        if not events:
+            return ""
+        activity_lines = []
+        # Sort events chronologically
+        sorted_events = sorted(events, key=lambda x: x.get('created_at', ''))
+        for event in sorted_events:
+            event_type = event.get('type')
+            created_at = event.get('created_at', '')
+            if event_type == 'IssuesEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_lines.append(f"• Issue opened ({created_at})")
+                elif action == 'closed':
+                    activity_lines.append(f"• Issue closed ({created_at})")
+                elif action == 'reopened':
+                    activity_lines.append(f"• Issue reopened ({created_at})")
+            elif event_type == 'PullRequestEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'opened':
+                    activity_lines.append(f"• Pull request opened ({created_at})")
+                elif action == 'closed':
+                    merged = event.get('payload', {}).get('pull_request', {}).get('merged', False)
+                    if merged:
+                        activity_lines.append(f"• Pull request merged ({created_at})")
+                    else:
+                        activity_lines.append(f"• Pull request closed without merge ({created_at})")
+                elif action == 'reopened':
+                    activity_lines.append(f"• Pull request reopened ({created_at})")
+            elif event_type == 'PushEvent':
+                ref = event.get('payload', {}).get('ref', '')
+                commits = len(event.get('payload', {}).get('commits', []))
+                if 'main' in ref or 'master' in ref:
+                    activity_lines.append(f"• {commits} commits pushed to main branch ({created_at})")
+            elif event_type == 'IssueCommentEvent':
+                action = event.get('payload', {}).get('action')
+                if action == 'created':
+                    activity_lines.append(f"• Comment added ({created_at})")
+        if activity_lines:
+            return f"*GitHub Activity Timeline:*\n\n" + "\n".join(activity_lines[-10:])  # Last 10 activities
+        return ""
     def _attach_epic_post_creation(self, task_key: str, epic_key: str, repo_owner: str) -> bool:
         """Attach a JIRA task to an Epic after creation using the Epic Link field."""
         try:
@@ -1081,6 +1166,7 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
     
     def _get_issue_comments_for_task(self, repo_owner, repo_name, issue_num):
         """Extract comments from GitHub issue/PR data for JIRA task creation"""
+        # (Removed duplicate/unfinished try block that caused SyntaxError)
         first_comment = None
         subsequent_comments = []
         try:
@@ -1099,44 +1185,54 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
                     'body': issue_data.get('body', ''),
                     'user': issue_data.get('user', {}),
                     'created_at': issue_data.get('created_at', ''),
-                    'id': 0  # pseudo-id for ordering
+                    'id': 0,
+                    '__type': 'issue_body'
                 }
             else:
-                first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0}
+                first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0, '__type': 'issue_body'}
 
             # Fetch issue comments
             comments = []
             comments_response = requests.get(comments_url, headers=headers)
             if comments_response.status_code == 200:
                 comments = comments_response.json()
-                for c in comments:
-                    c['__type'] = 'issue_comment'
 
             # Fetch PR review comments (if PR)
             pr_review_comments = []
             pr_review_response = requests.get(pr_review_url, headers=headers)
             if pr_review_response.status_code == 200:
                 pr_review_comments = pr_review_response.json()
-                for c in pr_review_comments:
-                    c['__type'] = 'pr_review_comment'
 
             # Combine all comments (issue comments + PR review comments)
             all_comments = []
+            # Add issue comments (skip if body is same as first_comment to avoid duplication)
             for c in comments:
+                c_body = c.get('body', '') or ''
+                c_user = c.get('user', {}) or {}
+                c_login = c_user.get('login', '') or ''
+                fc_body = first_comment.get('body', '') or ''
+                fc_user = first_comment.get('user', {}) or {}
+                fc_login = fc_user.get('login', '') or ''
+                # Avoid duplicating the issue body as a comment
+                if (c_body.strip() == fc_body.strip()) and (c_login == fc_login):
+                    continue
                 all_comments.append({
-                    'body': c.get('body', ''),
-                    'user': c.get('user', {}),
-                    'created_at': c.get('created_at', ''),
+                    'body': c_body,
+                    'user': c_user,
+                    'created_at': c.get('created_at', '') or '',
                     'id': c.get('id', 0),
-                    '__type': c.get('__type', 'issue_comment')
+                    '__type': 'issue_comment'
                 })
+            # Add PR review comments
             for c in pr_review_comments:
+                c_body = c.get('body', '') or ''
+                c_user = c.get('user', {}) or {}
                 all_comments.append({
-                    'body': c.get('body', ''),
-                    'user': c.get('user', {}),
-                    'created_at': c.get('created_at', ''),
+                    'body': c_body,
+                    'user': c_user,
+                    'created_at': c.get('created_at', '') or '',
                     'id': c.get('id', 0),
-                    '__type': c.get('__type', 'pr_review_comment')
+                    '__type': 'pr_review_comment'
                 })
 
             # Sort all comments by created_at (chronological order)
@@ -1147,19 +1243,13 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
 
         except Exception as e:
             print(f"      ⚠️  Could not fetch comments from GitHub API: {e}")
-            first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0}
+            first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0, '__type': 'issue_body'}
             subsequent_comments = []
 
         return {
             'first_comment': first_comment.get('body', '') if first_comment else None,
             'subsequent_comments': subsequent_comments
         }
-
-    def _create_activity_log_from_events(self, events):
-        """Create activity log from GitHub events"""
-        if not events:
-            return ""
-            
         activity_lines = []
         
         # Process events chronologically
@@ -1809,40 +1899,47 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
             return {}
     
     def search_existing_jira_task(self, issue_url: str, issue_number: int, repo_name: str, repo_owner: str = None) -> Optional[str]:
-        """Search for existing JIRA task with this GitHub issue URL in the description (deduplication by URL)"""
+        """
+        Search for existing JIRA task with this GitHub issue URL in the description or summary (deduplication by URL or summary pattern).
+        Returns the JIRA key if found, else None.
+        """
         try:
             headers = self.get_jira_headers()
-            
             # Escape special characters in the issue URL for JQL search
-            # This fixes the 400 error caused by unescaped special characters
-            # Only escape characters that actually need escaping in JQL: quotes and backslashes
             escaped_url = issue_url.replace('\\', '\\\\').replace('"', '\\"')
-            
-            # Use the escaped GitHub issue URL as a unique identifier in the description
-            jql = f'project = "{self.jira_project}" AND description ~ "{escaped_url}"'
+            summary_pattern = f"#{issue_number}"
+            repo_name_pattern = repo_name or ''
+            repo_owner_pattern = repo_owner or ''
+            # JQL: match URL in description or issue number/repo/owner in summary, but only for Tasks (not Epics)
+            jql = (
+                f'project = "{self.jira_project}" AND issuetype = "Task" AND '
+                f'(description ~ "{escaped_url}" OR summary ~ "{summary_pattern}" OR summary ~ "{repo_name_pattern}" OR summary ~ "{repo_owner_pattern}")'
+            )
+            print(f"🔍 Searching for existing task with GitHub issue URL, summary, repo, or owner: {issue_url}, {summary_pattern}, {repo_name_pattern}, {repo_owner_pattern}")
+            print(f"🔍 Escaped JQL query: {jql}")
             url = f"https://{self.jira_domain}/rest/api/2/search"
             params = {'jql': jql, 'maxResults': 5}
-            
-            print(f"🔍 Searching for existing task with GitHub issue URL: {issue_url}")
-            print(f"🔍 Escaped JQL query: {jql}")
-            
             response = requests.get(url, headers=headers, params=params, timeout=10)
-            
             if response.status_code == 200:
                 result = response.json()
-                print(f"📊 Found {result.get('total', 0)} potential matches by URL")
+                print(f"📊 Found {result.get('total', 0)} potential matches by URL, summary, repo, or owner")
                 if result.get('total', 0) > 0:
                     for issue in result.get('issues', []):
-                        desc = issue.get('fields', {}).get('description', '')
-                        if issue_url.lower() in (desc or '').lower():
-                            print(f"✅ Found existing JIRA task: {issue['key']} for URL {issue_url}")
+                        desc = issue.get('fields', {}).get('description', '') or ''
+                        summ = issue.get('fields', {}).get('summary', '') or ''
+                        if (
+                            (issue_url.lower() in desc.lower()) or
+                            (summary_pattern in summ) or
+                            (repo_name_pattern and repo_name_pattern.lower() in summ.lower()) or
+                            (repo_owner_pattern and repo_owner_pattern.lower() in summ.lower())
+                        ):
+                            print(f"✅ Found existing JIRA task: {issue['key']} for URL, summary, repo, or owner pattern")
                             return issue['key']
-                    print(f"📝 No exact URL match found in descriptions")
+                    print(f"📝 No exact URL, summary, repo, or owner match found")
                 else:
-                    print(f"📝 No tasks found with URL in description")
+                    print(f"📝 No tasks found with URL, summary, repo, or owner pattern")
             else:
                 print(f"⚠️  JIRA search failed: {response.status_code} - {response.text[:200]}")
-                
             return None
         except Exception as e:
             print(f"⚠️  Error searching JIRA: {e}")

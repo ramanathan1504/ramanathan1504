@@ -21,11 +21,88 @@ load_dotenv()
 
 
 class GitHubJIRAMonitor:
-    def project_supports_epic(self) -> bool:
-        """Check if the JIRA project supports the 'Epic' issue type."""
+    def _attach_epic_post_creation(self, task_key: str, epic_key: str, repo_owner: str) -> bool:
+        """Attach a JIRA task to an Epic after creation using the Epic Link field."""
+        try:
+            epic_link_field = self.get_epic_link_field_id()
+            if not epic_link_field:
+                print(f"    ❌ Could not find Epic Link field ID for project {self.jira_project}")
+                return False
+            url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
+            headers = self.get_jira_headers()
+            payload = {"fields": {epic_link_field: epic_key}}
+            response = requests.put(url, headers=headers, json=payload, timeout=15)
+            if response.status_code in [200, 204]:
+                print(f"    ✅ Successfully attached {task_key} to Epic {epic_key}")
+                return True
+            else:
+                print(f"    ❌ Failed to attach Epic: {response.status_code} {response.text}")
+                return False
+        except Exception as e:
+            print(f"    ❌ Exception attaching Epic: {e}")
+            return False
+    def add_jira_comment_for_pr_review(self, repo_owner, repo_name, issue_number, body, author, created, resolved, dry_run=False):
+        """
+        Add a PR review comment to the corresponding JIRA task, including resolved/unresolved status.
+        """
+        # Find the JIRA task for this issue/PR
+        issue_url = f"https://github.com/{repo_owner}/{repo_name}/issues/{issue_number}"
+        jira_key = self.search_existing_jira_task(issue_url, issue_number, repo_name, repo_owner)
+        if not jira_key:
+            print(f"      ⚠️  No JIRA task found for PR #{issue_number} in {repo_owner}/{repo_name}")
+            return False
+        status_str = 'RESOLVED' if resolved else 'UNRESOLVED'
+        jira_comment = (
+            f"GITHUB PR REVIEW COMMENT\n"
+            f"------------------------\n"
+            f"Author: @{author}\n"
+            f"Date: {created}\n"
+            f"Status: {status_str}\n"
+            f"Comment: {body}\n"
+            f"------------------------"
+        )
+        if dry_run:
+            print(f"      🧪 DRY RUN: Would add PR review comment to JIRA {jira_key}:")
+            print(jira_comment)
+            return True
         try:
             headers = self.get_jira_headers()
+            url = f"https://{self.jira_domain}/rest/api/2/issue/{jira_key}/comment"
+            payload = {"body": jira_comment}
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in [200, 201]:
+                print(f"      ✅ Added PR review comment to JIRA {jira_key}")
+                return True
+            else:
+                print(f"      ❌ Failed to add PR review comment to JIRA {jira_key}: {resp.status_code} {resp.text}")
+                return False
+        except Exception as e:
+            print(f"      ❌ Error adding PR review comment to JIRA: {e}")
+            return False
+    def process_all_forked_repos(self, max_issues_per_repo=20, dry_run=False):
+        """
+        Fetch all forked repos for the user and process their issues/PRs directly.
+        This covers all forks, not just those with recent activity.
+        """
+        print("\n🚀 === PROCESSING ALL FORKED REPOS ===")
+        headers = self.get_github_headers()
+        url = f"https://api.github.com/users/{self.github_user}/repos?type=forks&per_page=100"
+        page = 1
+        forked_repos = []
+        while True:
+            paged_url = url + f"&page={page}"
+            resp = requests.get(paged_url, headers=headers, timeout=20)
+            if resp.status_code != 200:
+                print(f"❌ Error fetching forked repos: {resp.status_code} {resp.text[:200]}")
+                break
+            repos = resp.json()
+            if not repos:
+                break
+
+    def project_supports_epic(self):
+        try:
             url = f"https://{self.jira_domain}/rest/api/2/issue/createmeta?projectKeys={self.jira_project}&expand=projects.issuetypes"
+            headers = self.get_jira_headers()
             resp = requests.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
                 data = resp.json()
@@ -69,95 +146,11 @@ class GitHubJIRAMonitor:
                         print(f"[JIRA] Found Epic Link field (partial match): '{field_name}' -> {field_id}")
                         return self._epic_link_field_id
                 
-                # If no Epic Link field found, try common custom field IDs
-                common_epic_fields = ['customfield_10008', 'customfield_10014', 'customfield_10010']
-                for field_id in common_epic_fields:
-                    for field in fields:
-                        if field.get('id') == field_id:
-                            field_name = field.get('name', '')
-                            if 'epic' in field_name.lower():
-                                self._epic_link_field_id = field_id
-                                print(f"[JIRA] Using common Epic field: '{field_name}' -> {field_id}")
-                                return self._epic_link_field_id
-                            
-                print("[JIRA] Could not find 'Epic Link' field, trying default customfield_10008")
-            else:
-                print(f"[JIRA] Error fetching fields: {resp.status_code}")
-        except Exception as e:
-            print(f"[JIRA] Error fetching Epic Link field id: {e}")
-        
-        # Default fallback
-        self._epic_link_field_id = 'customfield_10008'
-        print(f"[JIRA] Using default Epic Link field: {self._epic_link_field_id}")
-        return self._epic_link_field_id
-    def post_action_log_to_jira(self, jira_key: str, action_type: str, action_detail: str, actor: str, timestamp: str, dry_run: bool = False) -> bool:
-        """Post an action log comment to the JIRA issue using the provided template."""
-        jira_comment = (
-            "ACTION LOG\n"
-            "-----------\n"
-            f"Action: {action_type}\n"
-            f"Detail: {action_detail}\n"
-            f"Triggered By: @{actor}\n"
-            f"Time: {timestamp}\n"
-            "-----------"
-        )
-        if dry_run:
-            print(f"🧪 DRY RUN: Would add action log to JIRA task {jira_key}:")
-            print(jira_comment)
-            return True
-        try:
-            headers = self.get_jira_headers()
-            url = f"https://{self.jira_domain}/rest/api/2/issue/{jira_key}/comment"
-            payload = {"body": jira_comment}
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in [200, 201]:
-                print(f"✅ Added action log to JIRA task {jira_key}")
-                return True
-            else:
-                print(f"❌ Failed to add action log to JIRA task {jira_key}: {resp.status_code} {resp.text}")
-                return False
-        except Exception as e:
-            print(f"❌ Error adding action log to JIRA: {e}")
-            return False
-    def process_specific_issue(self, repo_owner: str, repo_name: str, issue_number: int, dry_run: bool = False) -> tuple:
-        """Process a specific issue or PR for authorship events, ensuring correct repo pathing"""
-        try:
-            # Ensure correct repo path (owner/repo)
-            if '/' in repo_name:
-                repo_full = repo_name
-            else:
-                repo_full = f"{repo_owner}/{repo_name}"
-
-            # Fetch issue details
-            issue_url = f"https://github.com/{repo_full}/issues/{issue_number}"
-            issue_details = self.get_issue_details(issue_url)
-            if not issue_details:
-                print(f"❌ Could not fetch issue #{issue_number}: 404")
-                return 'error', False
-
-            # Prepare event data for JIRA task creation
-            event_data = {
-                'repo_name': repo_full,
-                'repo_owner': repo_owner,
-                'issue_url': issue_url,
-                'issue_title': issue_details.get('title', 'No title'),
-                'issue_number': issue_number,
-                'comment_body': issue_details.get('body', ''),
-                'created_at': issue_details.get('created_at', '')
-            }
-            # Use fork status for label
-            is_fork = self.check_fork_status(repo_full)
-            # Use default kanban status and labels for authorship events
-            kanban_status = None
-            labels = None
-            success = self.create_jira_task(event_data, is_fork, dry_run, kanban_status, labels)
-            if success:
-                return 'contribution', True
-            else:
-                return 'error', False
+                # If no Epic Link field found, return None
+                pass
         except Exception as e:
             print(f"❌ Error processing specific issue: {e}")
-            return 'error', False
+            return None
     def get_jira_headers(self):
         """Return headers for JIRA API requests with correct Authorization"""
         return {
@@ -277,6 +270,11 @@ class GitHubJIRAMonitor:
         # 1. GATHER ALL GITHUB EVENTS
         print("\n📊 Step 1: Gathering all GitHub events...")
         all_events = self.fetch_github_events(since=since, max_pages=max_pages)
+        # Log all event types seen
+        event_types_seen = set()
+        for event in all_events:
+            event_types_seen.add(event.get('type', 'UNKNOWN'))
+        print(f"\n📝 All event types seen in fetched events: {sorted(event_types_seen)}")
         
         # 2. GROUP EVENTS BY REPO AND ISSUE
         print(f"\n🗂️  Step 2: Grouping {len(all_events)} events by owner/repo/issue...")
@@ -288,28 +286,49 @@ class GitHubJIRAMonitor:
             'status_timeline': [],
             'final_status': 'DISCUSSION'
         }))
+        processed_repos = set()
         
         # Group all events by repo and issue
         for event in all_events:
             repo_info = event.get('repo', {})
             repo_name = repo_info.get('name', '')
-            
+            # Log the repo name from event (removed for clean output)
+            # if not repo_name or '/' not in repo_name:
             if not repo_name or '/' not in repo_name:
+                # print(f"[DEBUG] Skipping event with invalid repo_name: {repo_name}")
                 continue
-                
             repo_owner, repo_name_only = repo_name.split('/', 1)
-            
-            # Skip own/org repos
-            if self.should_skip_repo(repo_owner):
+            # Log the repo_owner and repo_name_only (removed for clean output)
+            # Check skip condition and log
+            should_skip = self.should_skip_repo(repo_owner)
+            # print(f"[DEBUG] should_skip_repo({repo_owner}) = {should_skip}")
+            if should_skip:
+                # print(f"[DEBUG] Skipping repo {repo_owner}/{repo_name_only} due to skip condition. (Own repo or org: {self.github_user}, {self.skip_orgs})")
                 continue
-            
+            # else:
+            #     print(f"[INFO] Including repo {repo_owner}/{repo_name_only} as external/forked (not in user/org skip list)")
             # Extract issue numbers from different event types
             issue_numbers = self._extract_issue_numbers_from_event(event)
-            
+            # print(f"[DEBUG] Extracted issue_numbers from event: {issue_numbers}")
             # Add event to all related issues
             for issue_num in issue_numbers:
                 repo_key = f"{repo_owner}/{repo_name_only}"
                 grouped_data[repo_key][issue_num]['events'].append(event)
+                processed_repos.add(repo_key)
+                # print(f"[DEBUG] Added event to grouped_data[{repo_key}][{issue_num}]")
+        print(f"\n📝 All forked/external repos processed: {sorted(processed_repos)}")
+        print(f"\n🔗 List of all my forked/external repo names:")
+        for repo in sorted(processed_repos):
+            print(f"  - {repo}")
+        # Print all forked/external repos that had at least one comment event
+        commented_repos = set()
+        for repo_key, issues in grouped_data.items():
+            for issue_num, issue_data in issues.items():
+                for event in issue_data['events']:
+                    if event.get('type') in ['IssueCommentEvent', 'PullRequestReviewCommentEvent']:
+                        commented_repos.add(repo_key)
+                        break
+        print(f"\n💬 All forked/external repos with at least one comment event: {sorted(commented_repos)}")
         
         # 3. ANALYZE STATUS FOR EACH GROUPED ISSUE
         print(f"\n📈 Step 3: Analyzing status for each issue...")
@@ -323,23 +342,28 @@ class GitHubJIRAMonitor:
             
             for issue_num, issue_data in issues.items():
                 print(f"  🔍 Analyzing issue #{issue_num}...")
-                
+                # Log all events for this issue
+                for ev in issue_data['events']:
+                    ev_type = ev.get('type', 'UNKNOWN')
+                    ev_created = ev.get('created_at', 'N/A')
+                    print(f"    • Event: {ev_type} at {ev_created}")
+
                 # Fetch full issue details
                 issue_details = self._get_issue_details_for_analysis(repo_owner, repo_name_only, issue_num)
                 issue_data['issue_details'] = issue_details
-                
+
                 # Analyze PR status
                 pr_info = self._analyze_pr_status_for_issue(repo_owner, repo_name_only, issue_num, issue_data['events'])
                 issue_data['pr_info'] = pr_info
-                
+
                 # Determine final status using STATUS_FLOW_PROPOSAL logic
                 final_status, status_reasons = self._determine_final_status(issue_data, pr_info)
                 issue_data['final_status'] = final_status
                 issue_data['status_reasons'] = status_reasons
-                
+
                 # Store analyzed data
                 analyzed_data[repo_key][issue_num] = issue_data
-                
+
                 print(f"    📊 Final Status: {final_status}")
                 print(f"    📝 Reasons: {', '.join(status_reasons)}")
         
@@ -1059,48 +1083,73 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
         """Extract comments from GitHub issue/PR data for JIRA task creation"""
         first_comment = None
         subsequent_comments = []
-        
         try:
-            # Build GitHub API URL for the issue/PR
+            # Build GitHub API URLs
             issue_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_num}"
             comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{issue_num}/comments"
-            
+            pr_review_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{issue_num}/comments"
             headers = self.get_github_headers()
-            
-            # Fetch issue details
+
+            # Fetch issue details (for the original body)
             issue_response = requests.get(issue_url, headers=headers)
             if issue_response.status_code == 200:
                 issue_data = issue_response.json()
-                
-                # Use issue body as first comment if it exists
-                issue_body = issue_data.get('body') or ''
-                if issue_body.strip():
-                    first_comment = {
-                        'author': issue_data.get('user', {}).get('login', 'Unknown'),
-                        'created_at': issue_data.get('created_at', ''),
-                        'body': issue_body
-                    }
-            
-            # Fetch comments
+                # The first comment is the issue body
+                first_comment = {
+                    'body': issue_data.get('body', ''),
+                    'user': issue_data.get('user', {}),
+                    'created_at': issue_data.get('created_at', ''),
+                    'id': 0  # pseudo-id for ordering
+                }
+            else:
+                first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0}
+
+            # Fetch issue comments
+            comments = []
             comments_response = requests.get(comments_url, headers=headers)
             if comments_response.status_code == 200:
                 comments = comments_response.json()
-                
-                # Sort comments by creation date
-                comments.sort(key=lambda x: x.get('created_at', ''))
-                
-                for comment in comments:
-                    if comment.get('body', '').strip():
-                        comment_data = {
-                            'author': comment.get('user', {}).get('login', 'Unknown'),
-                            'created_at': comment.get('created_at', ''),
-                            'body': comment.get('body', '')
-                        }
-                        subsequent_comments.append(comment_data)
-                        
+                for c in comments:
+                    c['__type'] = 'issue_comment'
+
+            # Fetch PR review comments (if PR)
+            pr_review_comments = []
+            pr_review_response = requests.get(pr_review_url, headers=headers)
+            if pr_review_response.status_code == 200:
+                pr_review_comments = pr_review_response.json()
+                for c in pr_review_comments:
+                    c['__type'] = 'pr_review_comment'
+
+            # Combine all comments (issue comments + PR review comments)
+            all_comments = []
+            for c in comments:
+                all_comments.append({
+                    'body': c.get('body', ''),
+                    'user': c.get('user', {}),
+                    'created_at': c.get('created_at', ''),
+                    'id': c.get('id', 0),
+                    '__type': c.get('__type', 'issue_comment')
+                })
+            for c in pr_review_comments:
+                all_comments.append({
+                    'body': c.get('body', ''),
+                    'user': c.get('user', {}),
+                    'created_at': c.get('created_at', ''),
+                    'id': c.get('id', 0),
+                    '__type': c.get('__type', 'pr_review_comment')
+                })
+
+            # Sort all comments by created_at (chronological order)
+            all_comments_sorted = sorted(all_comments, key=lambda x: x.get('created_at', ''))
+
+            # All comments (issue/PR review) go to subsequent_comments
+            subsequent_comments = all_comments_sorted
+
         except Exception as e:
             print(f"      ⚠️  Could not fetch comments from GitHub API: {e}")
-        
+            first_comment = {'body': '', 'user': {}, 'created_at': '', 'id': 0}
+            subsequent_comments = []
+
         return {
             'first_comment': first_comment.get('body', '') if first_comment else None,
             'subsequent_comments': subsequent_comments
@@ -1161,23 +1210,25 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
     def _add_comments_to_jira_task(self, task_key, comments):
         """Add GitHub comments to JIRA task as comments"""
         for comment in comments:
-            comment_body = f"*GitHub Comment by {comment['author']} at {comment['created_at']}:*\n\n{comment['body']}"
-            
-            jira_comment_data = {
-                "body": comment_body
-            }
-            
+            # Support both old and new comment dicts
+            author = comment.get('author')
+            if not author:
+                # Try GitHub API v3/4 style
+                user = comment.get('user', {})
+                author = user.get('login', 'Unknown')
+            created_at = comment.get('created_at', '')
+            body = comment.get('body', '')
+            comment_body = f"*GitHub Comment by {author} at {created_at}:*\n\n{body}"
+            jira_comment_data = {"body": comment_body}
             comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
             headers = self.get_jira_headers()
-            
             response = requests.post(
                 comment_url,
                 headers=headers,
                 json=jira_comment_data
             )
-            
             if response.status_code in [200, 201]:
-                print(f"      ✅ Added comment from {comment['author']} ({comment['created_at']})")
+                print(f"      ✅ Added comment from {author} ({created_at})")
             else:
                 print(f"      ❌ Failed to add comment: {response.status_code} - {response.text}")
 
@@ -1222,102 +1273,18 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
         
         if activity_log:
             activity_body = f"*Activity Log - Status Transitions:*\n\n" + "\n".join(activity_log) + f"\n\n*Final Status: {final_status}*"
-            
-            jira_comment_data = {
-                "body": activity_body
-            }
-            
+            jira_comment_data = {"body": activity_body}
             comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
             headers = self.get_jira_headers()
-            
             response = requests.post(
                 comment_url,
                 headers=headers,
                 json=jira_comment_data
             )
-            
             if response.status_code in [200, 201]:
                 print(f"      ✅ Added activity log with {len(activity_log)} transitions")
             else:
                 print(f"      ❌ Failed to add activity log: {response.status_code} - {response.text}")
-    
-    def _attach_epic_post_creation(self, task_key: str, epic_key: str, repo_owner: str) -> bool:
-        """Attempt to attach Epic to task after creation using different methods"""
-        try:
-            headers = self.get_jira_headers()
-            epic_link_field = self.get_epic_link_field_id()
-            
-            print(f"    🔗 Attempting post-creation Epic attachment for {task_key}")
-            
-            # Method 1: Update Epic Link field
-            update_payload = {
-                "fields": {
-                    epic_link_field: epic_key
-                }
-            }
-            
-            url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
-            response = requests.put(url, headers=headers, json=update_payload, timeout=30)
-            
-            if response.status_code == 204:
-                print(f"    ✅ Epic attached post-creation via {epic_link_field}")
-                return True
-            
-            # Method 2: Try alternative Epic fields
-            for alt_field in ['customfield_10014', 'customfield_10010']:
-                try:
-                    alt_update_payload = {
-                        "fields": {
-                            alt_field: epic_key
-                        }
-                    }
-                    
-                    response = requests.put(url, headers=headers, json=alt_update_payload, timeout=30)
-                    
-                    if response.status_code == 204:
-                        print(f"    ✅ Epic attached post-creation via {alt_field}")
-                        return True
-                except Exception as e:
-                    print(f"    ⚠️  Failed to attach Epic via {alt_field}: {e}")
-                    continue
-            
-            # Method 3: Try Epic Name field
-            try:
-                epic_name = f"GitHub Contributions - {repo_owner}"
-                epic_name_payload = {
-                    "fields": {
-                        "customfield_10011": epic_name
-                    }
-                }
-                
-                response = requests.put(url, headers=headers, json=epic_name_payload, timeout=30)
-                
-                if response.status_code == 204:
-                    print(f"    ✅ Epic attached post-creation via Epic Name field")
-                    return True
-            except Exception as e:
-                print(f"    ⚠️  Failed to attach Epic via Epic Name: {e}")
-            
-            # Method 4: Add Epic link via comment (fallback)
-            try:
-                epic_comment = f"🔗 This task is part of Epic: {epic_key} (GitHub Contributions - {repo_owner})"
-                comment_payload = {"body": epic_comment}
-                comment_url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}/comment"
-                
-                response = requests.post(comment_url, headers=headers, json=comment_payload, timeout=30)
-                
-                if response.status_code in [200, 201]:
-                    print(f"    ✅ Epic reference added via comment as fallback")
-                    return True
-            except Exception as e:
-                print(f"    ⚠️  Failed to add Epic reference via comment: {e}")
-            
-            print(f"    ❌ All Epic attachment methods failed")
-            return False
-            
-        except Exception as e:
-            print(f"    ❌ Error in post-creation Epic attachment: {e}")
-            return False
     
     def run_core_workflow(self, max_pages: int = 10, since_minutes: int = None, dry_run: bool = False) -> Dict:
         """
@@ -2065,105 +2032,99 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
             return False
     
     def update_jira_task(self, task_key: str, new_comment: str, dry_run: bool = False) -> bool:
-        """Update existing JIRA task with new comment"""
+        """
+        Update existing JIRA task with a new comment, ensuring uniqueness and highlighting commenter info.
+        Only add the comment if it is not already present in the description.
+        """
         try:
             if dry_run:
-                print(f"🧪 DRY RUN: Would update task {task_key} with new comment")
+                print(f"🧪 DRY RUN: Would update JIRA task {task_key} with comment:")
+                print(new_comment)
                 return True
-            
-            # Get current description
+
             headers = self.get_jira_headers()
-            
             url = f"https://{self.jira_domain}/rest/api/2/issue/{task_key}"
             response = requests.get(url, headers=headers, timeout=10)
-            
             if response.status_code != 200:
                 print(f"❌ Could not fetch task {task_key}: {response.status_code}")
                 return False
-            
+
             current_data = response.json()
             current_desc = current_data.get('fields', {}).get('description', '')
-            
-            # Append new comment
-            new_desc = f"{current_desc}\n\n--- New Comment ({datetime.now().strftime('%Y-%m-%d %H:%M')}) ---\n{new_comment}"
-            
-            # Update task
+
+            # Only add the comment if it is not already present (unique by content)
+            if new_comment.strip() in current_desc:
+                print(f"⚠️  Comment already exists in JIRA task {task_key}, skipping duplicate.")
+                return True
+
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+            new_desc = f"{current_desc}\n\n--- New Comment ({now_str}) ---\n{new_comment}"
+
             update_payload = {
                 "fields": {
                     "description": new_desc
                 }
             }
-            
             response = requests.put(url, headers=headers, json=update_payload, timeout=30)
-            
             if response.status_code == 204:
                 print(f"✅ Updated JIRA task: {task_key}")
                 return True
             else:
                 print(f"❌ Failed to update task {task_key}: {response.status_code}")
                 return False
-                
         except Exception as e:
             print(f"❌ Error updating JIRA task: {e}")
             return False
     
     def process_comment_event(self, event: Dict, dry_run: bool = False) -> Tuple[str, bool]:
-        """Process a single comment event"""
+        """
+        Process a single comment event, ensuring unique comment addition and highlighting commenter info.
+        """
         try:
             payload = event.get('payload', {})
             repo = event.get('repo', {})
             event_type = event.get('type', '')
-            
-            # Extract repository information from GitHub event
+
             repo_name_raw = repo.get('name', 'unknown')
-            # Ensure we only get the repo name, not owner/repo format
             repo_name_only = repo_name_raw.split('/')[-1] if '/' in repo_name_raw else repo_name_raw
             repo_url = repo.get('url', '')
-            
-            # Extract owner from repository URL or issue URL
             repo_owner = 'unknown'
             repo_full_name = 'unknown/unknown'
-            
-            # Try to extract from repo URL: https://api.github.com/repos/owner/repo_name
+
+            # Try to extract owner from repo URL
             if repo_url and '/repos/' in repo_url:
-                url_parts = repo_url.split('/repos/')[-1].split('/')
-                if len(url_parts) >= 2:
-                    repo_owner = url_parts[0]
-                    repo_full_name = f"{repo_owner}/{repo_name_only}"
-            
-            # If that fails, try to extract from issue URL
+                try:
+                    repo_owner = repo_url.split('/repos/')[1].split('/')[0]
+                    repo_full_name = '/'.join(repo_url.split('/repos/')[1].split('/')[:2])
+                except Exception:
+                    pass
+
+            # Fallback: extract from issue URL
             issue = payload.get('issue', {})
             issue_url = issue.get('html_url', '')
-            if repo_owner == 'unknown' and issue_url:
-                # Extract from: https://github.com/owner/repo/issues/123
-                if 'github.com/' in issue_url:
-                    url_parts = issue_url.split('github.com/')[-1].split('/')
-                    if len(url_parts) >= 2:
-                        repo_owner = url_parts[0]
-                        repo_name_only = url_parts[1]
-                        repo_full_name = f"{repo_owner}/{repo_name_only}"
-            
-            # Final repository name for processing
+            if repo_owner == 'unknown' and issue_url and 'github.com/' in issue_url:
+                try:
+                    repo_owner = issue_url.split('github.com/')[1].split('/')[0]
+                    repo_full_name = '/'.join(issue_url.split('github.com/')[1].split('/')[:2])
+                except Exception:
+                    pass
+
             repo_name = repo_full_name if repo_full_name != 'unknown/unknown' else repo_name_only
-            
             comment = payload.get('comment', {})
             issue = payload.get('issue', {})
-            
             comment_body = comment.get('body', 'No comment body')
             issue_url = issue.get('html_url', '')
             issue_title = issue.get('title', 'No title')
             issue_number = issue.get('number', 0)
 
-            # Skip events with no issue URL
             if not issue_url:
                 print("⚠️  SKIPPED: No issue URL found for this event")
                 return 'skipped', False
-            
-            # Determine event context for "In Progress" detection
+
             is_review_comment = (event_type == 'PullRequestReviewCommentEvent')
             issue_author = issue.get('user', {}).get('login', '')
             is_own_issue_comment = (issue_author == self.github_user)
-            
+
             print(f"\n--- Processing Comment Event ---")
             print(f"Repository: {repo_name}")
             print(f"Owner: {repo_owner}")
@@ -2173,36 +2134,26 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
             print(f"Review Comment: {is_review_comment}")
             print(f"Own Issue Comment: {is_own_issue_comment}")
             print(f"Comment preview: {comment_body[:100]}...")
-            
-            # Check if should skip (skip own repos and specified orgs)
+
             if self.should_skip_repo(repo_owner):
                 print(f"✅ SKIPPED: Own/org repo - {repo_name} (owner: {repo_owner})")
-                return 'skipped', True
-            
-            # Only process if we have valid repository information
+                return 'skipped', False
+
             if repo_owner == 'unknown' or repo_name == 'unknown/unknown':
                 print(f"⚠️  SKIPPED: Could not determine repository owner/name")
                 return 'skipped', False
-            
-            # Check fork status
+
             is_fork = self.check_fork_status(repo_name)
-            
-            # Check PR status to determine Kanban column
             repo_name_only = repo_name.split('/')[-1]
             pr_status = self.check_pr_status(repo_owner, repo_name_only, issue_number)
-            
-            # Enhanced context detection for bidirectional flow
+
             is_comment_on_open_pr = False
             is_mention_on_open_pr = False
-            
-            # Check if this comment is on an open PR
             if pr_status.get('is_pr') and pr_status.get('state') == 'open':
                 is_comment_on_open_pr = True
-                # Check if user is mentioned in the comment
                 if f"@{self.github_user}" in comment_body:
                     is_mention_on_open_pr = True
-            
-            # Create event context for enhanced status determination
+
             event_context = {
                 'event_type': event_type,
                 'is_review_comment': is_review_comment,
@@ -2211,17 +2162,15 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
                 'is_comment_on_open_pr': is_comment_on_open_pr,
                 'is_mention_on_open_pr': is_mention_on_open_pr
             }
-            
+
             kanban_status, labels = self.determine_kanban_status(pr_status, is_fork, repo_owner, repo_name_only, event_context)
-            
-            # Enhanced status reporting
+
             print(f"📊 PR Status Analysis:")
             print(f"   Is Fork: {is_fork}")
             print(f"   PR Status: {pr_status}")
             print(f"   Kanban Column: {kanban_status}")
             print(f"   Labels: {labels}")
-            
-            # Prepare event data
+
             event_data = {
                 'repo_name': repo_name,
                 'repo_owner': repo_owner,
@@ -2232,63 +2181,43 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
                 'created_at': event.get('created_at', '')
             }
 
-            # Find the JIRA task for this issue
             jira_key = self.search_existing_jira_task(issue_url, issue_number, repo_name.split('/')[-1], repo_owner)
             if not jira_key:
-                # If not found, create the task as usual
                 success = self.create_jira_task(event_data, is_fork, dry_run, kanban_status, labels)
-                if success:
-                    return 'contribution' if is_fork else 'discussion', True
-                else:
+                if not success:
+                    return 'error', False
+                jira_key = self.search_existing_jira_task(issue_url, issue_number, repo_name.split('/')[-1], repo_owner)
+                if not jira_key:
+                    print(f"❌ Could not find or create JIRA task for comment event.")
                     return 'error', False
 
-            # If this is a PR review comment, just add the comment body and PR link
-            if event_type == 'PullRequestReviewCommentEvent':
+            # Format comment for JIRA, highlight commenter and time
+            comment_author = comment.get('user', {}).get('login', 'unknown')
+            comment_created_at = comment.get('created_at', '')
+            if is_review_comment:
                 pr_url = payload.get('pull_request', {}).get('html_url', '')
                 comment_url = comment.get('html_url', '')
-                comment_author = comment.get('user', {}).get('login', 'unknown')
-                comment_created_at = comment.get('created_at', '')
                 pr_link = pr_url or issue_url
                 jira_comment = (
-                    f"GITHUB PR REVIEW COMMENT\n"
-                    f"------------------------\n"
-                    f"Author: @{comment_author}\n"
-                    f"Date: {comment_created_at}\n"
+                    f"**GitHub PR Review by @{comment_author} at {comment_created_at}**\n"
                     f"PR: {pr_link}\n"
                     f"Comment: {comment_body}\n"
-                    f"Comment URL: {comment_url}\n"
-                    f"------------------------"
+                    f"[View on GitHub|{comment_url}]"
                 )
             else:
-                # Issue comment event
                 comment_url = comment.get('html_url', '')
-                comment_author = comment.get('user', {}).get('login', 'unknown')
-                comment_created_at = comment.get('created_at', '')
                 jira_comment = (
-                    f"*GitHub Comment by {comment_author} at {comment_created_at}:*\n\n{comment_body}"
+                    f"**GitHub Comment by @{comment_author} at {comment_created_at}**\n\n{comment_body}\n\n[View on GitHub|{comment_url}]"
                 )
 
             if dry_run:
                 print(f"🧪 DRY RUN: Would add comment to JIRA task {jira_key}:")
                 print(jira_comment)
-                return 'commented', True
+                return 'dry_run', True
 
-            # Add the comment to the JIRA task (as a comment, not description)
-            try:
-                headers = self.get_jira_headers()
-                url = f"https://{self.jira_domain}/rest/api/2/issue/{jira_key}/comment"
-                payload = {"body": jira_comment}
-                resp = requests.post(url, headers=headers, json=payload, timeout=15)
-                if resp.status_code in [200, 201]:
-                    print(f"✅ Added comment to JIRA task {jira_key}")
-                    return 'commented', True
-                else:
-                    print(f"❌ Failed to add comment to JIRA task {jira_key}: {resp.status_code} {resp.text}")
-                    return 'error', False
-            except Exception as e:
-                print(f"❌ Error adding comment to JIRA: {e}")
-                return 'error', False
-                
+            # Add the comment to the JIRA task description (unique, highlighted)
+            success = self.update_jira_task(jira_key, jira_comment, dry_run=False)
+            return ('contribution', True) if success else ('error', False)
         except Exception as e:
             print(f"❌ Error processing event: {e}")
             return 'error', False

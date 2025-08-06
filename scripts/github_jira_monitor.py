@@ -3093,45 +3093,42 @@ Original Date: {comment_date}"""
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="GitHub-JIRA Monitor/Migration Tool")
-    parser.add_argument('mode', choices=['monitor', 'migrate', 'core'], 
-                       help='Run mode: monitor (real-time), migrate (historical), core (new workflow)')
-    parser.add_argument('--since', type=int, default=15, help='Minutes to look back for monitor/core mode')
+    parser = argparse.ArgumentParser(description="GitHub-JIRA Core Workflow Runner")
     parser.add_argument('--dry-run', action='store_true', help='Dry run (no JIRA changes)')
+    parser.add_argument('--since', type=int, default=None, help='Minutes to look back (time-based run, optional)')
     parser.add_argument('--max-pages', type=int, default=10, help='Max pages to fetch per repo')
-    parser.add_argument('--limit-per-repo', type=int, default=0, help='Limit PRs per repo (0 = no limit)')
-    parser.add_argument('--repos', nargs='*', help='Target repositories for migration (owner/repo format)')
     args = parser.parse_args()
 
     monitor = GitHubJIRAMonitor()
 
-    if args.mode == 'monitor':
-        monitor.run_monitor(since_minutes=args.since, dry_run=args.dry_run)
-    elif args.mode == 'migrate':
-        target_repos = args.repos if args.repos else None
-        stats = monitor.run_full_migration(
-            target_repos=target_repos,
-            max_pages=args.max_pages,
-            limit_per_repo=args.limit_per_repo,
-            dry_run=args.dry_run
-        )
-        print("\n=== Migration Summary ===")
-        for k, v in stats.items():
-            print(f"{k.title()}: {v}")
-    elif args.mode == 'core':
-        # NEW CORE WORKFLOW MODE
-        print("🚀 Running CORE WORKFLOW as requested")
-        print("This implements: gather all GitHub data → group by owner/repo/issue → analyze status → create JIRA objects")
-        
-        stats = monitor.run_core_workflow(
-            max_pages=args.max_pages,
-            since_minutes=args.since if args.since != 15 else None,  # None = all time if default
-            dry_run=args.dry_run
-        )
-        
+    # 1. Dry run: --dry-run
+    if args.dry_run and args.since is None:
+        print("\n=== DRY RUN: Simulate all actions, no changes will be made ===")
+        stats = monitor.run_core_workflow(max_pages=args.max_pages, since_minutes=None, dry_run=True)
         if 'error' in stats:
             print(f"\n❌ Workflow failed: {stats['error']}")
-            sys.exit(1)
+            exit(1)
         else:
-            print(f"\n✅ Core workflow completed successfully!")
-            sys.exit(0)
+            print(f"\n✅ Dry run completed successfully!")
+            exit(0)
+
+    # 2. Time-based run: --since <minutes>
+    if args.since is not None:
+        print(f"\n=== TIME-BASED RUN: Processing events from the last {args.since} minutes ===")
+        stats = monitor.run_core_workflow(max_pages=args.max_pages, since_minutes=args.since, dry_run=False)
+        if 'error' in stats:
+            print(f"\n❌ Workflow failed: {stats['error']}")
+            exit(1)
+        else:
+            print(f"\n✅ Time-based run completed successfully!")
+            exit(0)
+
+    # 3. Full run: no flags (all data, real run)
+    print("\n=== FULL RUN: Processing all available data (no time filter) ===")
+    stats = monitor.run_core_workflow(max_pages=args.max_pages, since_minutes=None, dry_run=False)
+    if 'error' in stats:
+        print(f"\n❌ Workflow failed: {stats['error']}")
+        exit(1)
+    else:
+        print(f"\n✅ Full run completed successfully!")
+        exit(0)

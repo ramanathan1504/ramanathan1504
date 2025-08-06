@@ -34,23 +34,14 @@ on:
   # Manual execution - allows running the workflow with custom parameters
   workflow_dispatch:
     inputs:
-      operation:
-        description: 'Operation to perform'
-        required: false
-        default: 'monitor'
-        type: choice
-        options:
-          - monitor
-          - release-check
-          - both
-      since_minutes:
-        description: 'Look back this many minutes for events (monitor only)'
-        required: false
-        default: '600'
       dry_run:
         description: 'Dry run mode (true/false)'
         required: false
         default: 'false'
+      since_minutes:
+        description: 'Look back this many minutes for events (leave blank for full run, or set for time-based run)'
+        required: false
+        default: ''
 
 # Environment variables - these secrets must be configured in GitHub repository settings
 env:
@@ -93,64 +84,33 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests python-dotenv
         
-    # Step 4: Execute monitoring operations based on trigger type
-    - name: Run Comprehensive GitHub JIRA Monitor
+    # Step 4: Execute core workflow in one of three modes: dry run, time-based, or full run
+    - name: Run GitHub JIRA Core Workflow
       run: |
         cd scripts
-        
-        # Determine what operations to run based on how workflow was triggered
+        # Manual trigger: use workflow_dispatch inputs
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # Manual trigger - use user-provided inputs
-          OPERATION="${{ github.event.inputs.operation }}"
-          SINCE_MINUTES="${{ github.event.inputs.since_minutes }}"
           DRY_RUN="${{ github.event.inputs.dry_run }}"
-          
-          echo "🎯 Manual trigger: Operation=$OPERATION, Since=$SINCE_MINUTES min, DryRun=$DRY_RUN"
-          
-          # Set dry run flag
+          SINCE_MINUTES="${{ github.event.inputs.since_minutes }}"
           DRY_RUN_FLAG=""
+          SINCE_FLAG=""
           if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
             echo "🧪 Running in DRY RUN mode"
           fi
-          
-          # Execute based on operation type
-          case "$OPERATION" in
-            "monitor")
-              echo "📊 Running monitoring only..."
-              python github_jira_monitor.py monitor --since $SINCE_MINUTES $DRY_RUN_FLAG
-              ;;
-            "release-check")
-              echo "🚀 Running release check only..."
-              python github_jira_monitor.py release-check $DRY_RUN_FLAG
-              ;;
-            "both")
-              echo "🔄 Running both monitoring and release check..."
-              python github_jira_monitor.py monitor --since $SINCE_MINUTES $DRY_RUN_FLAG
-              echo ""
-              echo "🚀 Now checking for releases..."
-              python github_jira_monitor.py release-check $DRY_RUN_FLAG
-              ;;
-            *)
-              echo "❌ Unknown operation: $OPERATION"
-              exit 1
-              ;;
-          esac
-          
-        else
-          # Scheduled trigger - determine operation based on schedule
-          CURRENT_MINUTE=$(date +%M)
-          
-          # Every 10 minutes: run monitoring with 10-minute look back
-          # Simple and consistent - migrate YAML handles all variety/flexibility
-          echo "⏰ Scheduled trigger at minute $CURRENT_MINUTE"
-          echo "📊 Running monitoring (every 10 minutes)..."
-          python github_jira_monitor.py monitor --since 10
-          
-          # Every hour (minute 0): also run release check
-          if [ "$CURRENT_MINUTE" = "00" ]; then
-            echo ""
-            echo "🚀 Hourly release check (minute 00)..."
-            python github_jira_monitor.py release-check
+          if [ -n "$SINCE_MINUTES" ]; then
+            SINCE_FLAG="--since $SINCE_MINUTES"
+            echo "⏰ Running in TIME-BASED mode (last $SINCE_MINUTES min)"
           fi
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            python github_jira_monitor.py $DRY_RUN_FLAG
+          elif [ -n "$SINCE_FLAG" ]; then
+            python github_jira_monitor.py $SINCE_FLAG
+          else
+            python github_jira_monitor.py
+          fi
+        else
+          # Scheduled trigger: always run time-based (last 10 min)
+          echo "⏰ Scheduled trigger: Running time-based (last 10 min)"
+          python github_jira_monitor.py --since 10
         fi

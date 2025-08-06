@@ -59,10 +59,20 @@ on:
         required: false
         default: 'true'
 
-# Environment variables - same as main monitoring workflow
+# Environment variables - these secrets must be configured in GitHub repository settings
 env:
+  # GitHub configuration
+  GITHUB_USER: ${{ secrets.GH_USER }}
   GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+  
+  # JIRA configuration  
+  JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
+  JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
   JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+  
+  # Optional: Organizations to skip (comma-separated)
+  SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
+
 
 jobs:
   migration:

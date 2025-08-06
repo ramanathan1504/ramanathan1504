@@ -54,13 +54,23 @@ on:
 
 # Environment variables - these secrets must be configured in GitHub repository settings
 env:
-  # GitHub personal access token for API access
+  # GitHub configuration
+  # Secret name: GH_USER (configured in repository settings > Secrets and variables > Actions)
+  GITHUB_USER: ${{ secrets.GH_USER }}
   # Secret name: GH_TOKEN (configured in repository settings > Secrets and variables > Actions)
   GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
   
-  # JIRA authentication token (base64 encoded username:password or API token)
+  # JIRA configuration
+  # Secret name: JIRA_DOMAIN (configured in repository settings > Secrets and variables > Actions)
+  JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
+  # Secret name: JIRA_PROJECT (configured in repository settings > Secrets and variables > Actions)  
+  JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
   # Secret name: JIRA_AUTH (configured in repository settings > Secrets and variables > Actions)
   JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+  
+  # Optional: Organizations to skip (comma-separated)
+  # Secret name: SKIP_ORGS (configured in repository settings > Secrets and variables > Actions)
+  SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
 
 jobs:
   # Main job that runs the comprehensive GitHub-JIRA monitoring and release checking
@@ -108,7 +118,7 @@ jobs:
           case "$OPERATION" in
             "monitor")
               echo "📊 Running monitoring only..."
-              python github_jira_monitor.py monitor --since-minutes $SINCE_MINUTES $DRY_RUN_FLAG
+              python github_jira_monitor.py monitor --since $SINCE_MINUTES $DRY_RUN_FLAG
               ;;
             "release-check")
               echo "🚀 Running release check only..."
@@ -116,7 +126,7 @@ jobs:
               ;;
             "both")
               echo "🔄 Running both monitoring and release check..."
-              python github_jira_monitor.py monitor --since-minutes $SINCE_MINUTES $DRY_RUN_FLAG
+              python github_jira_monitor.py monitor --since $SINCE_MINUTES $DRY_RUN_FLAG
               echo ""
               echo "🚀 Now checking for releases..."
               python github_jira_monitor.py release-check $DRY_RUN_FLAG
@@ -136,7 +146,7 @@ jobs:
           # 20 min lookback with 10 min frequency = 10 min overlap for safety
           echo "⏰ Scheduled trigger at minute $CURRENT_MINUTE"
           echo "📊 Running monitoring (every 10 minutes)..."
-          python github_jira_monitor.py monitor --since-minutes 20
+          python github_jira_monitor.py monitor --since 20
           
           # Every hour (minute 0): also run release check
           if [ "$CURRENT_MINUTE" = "00" ]; then

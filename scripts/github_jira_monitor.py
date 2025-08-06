@@ -14,6 +14,10 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class GitHubJIRAMonitor:
@@ -236,8 +240,8 @@ class GitHubJIRAMonitor:
         except ImportError:
             pass  # If dotenv is not installed, skip
 
-        self.github_user = os.environ.get('GITHUB_USER')
-        self.github_token = os.environ.get('GITHUB_TOKEN')
+        self.github_user = os.environ.get('GH_USER')
+        self.github_token = os.environ.get('GH_TOKEN')
         self.jira_domain = os.environ.get('JIRA_DOMAIN')
         self.jira_project = os.environ.get('JIRA_PROJECT')
         self.jira_auth = os.environ.get('JIRA_AUTH')
@@ -251,7 +255,7 @@ class GitHubJIRAMonitor:
 
         # Basic validation
         if not self.github_user or not self.github_token or not self.jira_domain or not self.jira_project or not self.jira_auth:
-            print("❌ ERROR: Missing required environment variables. Please set GITHUB_USER, GITHUB_TOKEN, JIRA_DOMAIN, JIRA_PROJECT, JIRA_AUTH (and optionally SKIP_ORGS).")
+            print("❌ ERROR: Missing required environment variables. Please set GH_USER, GH_TOKEN, JIRA_DOMAIN, JIRA_PROJECT, JIRA_AUTH (and optionally SKIP_ORGS).")
             exit(1)
 
     def gather_and_group_github_data(self, max_pages: int = 10, since_minutes: int = None) -> Dict:
@@ -2261,13 +2265,7 @@ _Auto-synced from GitHub on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"""
                 comment_author = comment.get('user', {}).get('login', 'unknown')
                 comment_created_at = comment.get('created_at', '')
                 jira_comment = (
-                    f"GITHUB ISSUE COMMENT\n"
-                    f"-------------------\n"
-                    f"Author: @{comment_author}\n"
-                    f"Date: {comment_created_at}\n"
-                    f"Comment: {comment_body}\n"
-                    f"Comment URL: {comment_url}\n"
-                    f"-------------------"
+                    f"*GitHub Comment by {comment_author} at {comment_created_at}:*\n\n{comment_body}"
                 )
 
             if dry_run:

@@ -46,7 +46,7 @@ on:
       since_minutes:
         description: 'Look back this many minutes for events (monitor only)'
         required: false
-        default: '20'
+        default: '600'
       dry_run:
         description: 'Dry run mode (true/false)'
         required: false
@@ -56,9 +56,9 @@ on:
 env:
   # GitHub configuration
   # Secret name: GH_USER (configured in repository settings > Secrets and variables > Actions)
-  GITHUB_USER: ${{ secrets.GH_USER }}
+  GH_USER: ${{ secrets.GH_USER }}
   # Secret name: GH_TOKEN (configured in repository settings > Secrets and variables > Actions)
-  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
   
   # JIRA configuration
   # Secret name: JIRA_DOMAIN (configured in repository settings > Secrets and variables > Actions)
@@ -91,7 +91,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install requests python-dotenv
         
     # Step 4: Execute monitoring operations based on trigger type
     - name: Run Comprehensive GitHub JIRA Monitor
@@ -141,12 +141,11 @@ jobs:
           # Scheduled trigger - determine operation based on schedule
           CURRENT_MINUTE=$(date +%M)
           
-          # Every 10 minutes: run monitoring with 20-minute lookback
-          # This ensures no comments are missed even if workflow is delayed
-          # 20 min lookback with 10 min frequency = 10 min overlap for safety
+          # Every 10 minutes: run monitoring with 10-minute look back
+          # Simple and consistent - migrate YAML handles all variety/flexibility
           echo "⏰ Scheduled trigger at minute $CURRENT_MINUTE"
           echo "📊 Running monitoring (every 10 minutes)..."
-          python github_jira_monitor.py monitor --since 20
+          python github_jira_monitor.py monitor --since 10
           
           # Every hour (minute 0): also run release check
           if [ "$CURRENT_MINUTE" = "00" ]; then

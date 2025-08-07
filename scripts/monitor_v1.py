@@ -2,17 +2,17 @@
 
 import os
 import requests
-import github_api_v1
-import jira_api_v1
-import comments_v1
+from . import github_api_v1
+from . import jira_api_v1
+from . import comments_v1
 from datetime import datetime, timedelta
 from collections import defaultdict
 import re
-from utils_v1 import should_skip_repo, parse_issue_from_branch
-import analysis_v1
-import jira_tasks_v1
+from .utils_v1 import should_skip_repo, parse_issue_from_branch
+from . import analysis_v1
+from . import jira_tasks_v1
 
-from placeholders_v1 import MonitorPlaceholders
+from .placeholders_v1 import MonitorPlaceholders
 
 class GitHubJIRAMonitor(MonitorPlaceholders):
     def update_jira_status(self, task_key, status, dry_run=False):

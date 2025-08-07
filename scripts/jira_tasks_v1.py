@@ -123,7 +123,7 @@ def _create_jira_task_from_grouped_data(self, repo_owner, repo_name, issue_num, 
     issue_url = issue_details.get('html_url', f'https://github.com/{repo_owner}/{repo_name}/issues/{issue_num}')
     issue_author = issue_details.get('user', {}).get('login', 'unknown')
     created_at = issue_details.get('created_at', '')
-    from monitor_v1 import GitHubJIRAMonitor
+    from .monitor_v1 import GitHubJIRAMonitor
     existing_key = GitHubJIRAMonitor.search_existing_jira_task(issue_url, issue_num, repo_name, repo_owner)
     if existing_key:
         print(f"    🔄 Task already exists: {existing_key}")

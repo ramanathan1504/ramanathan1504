@@ -65,7 +65,7 @@ env:
 
 jobs:
   # Main job that runs the comprehensive GitHub-JIRA monitoring and release checking
-  comprehensive_monitor:
+  git-jira-monitor:
     runs-on: ubuntu-latest
     steps:
     # Step 1: Download the repository code to the runner
@@ -87,7 +87,6 @@ jobs:
     # Step 4: Execute core workflow in one of three modes: dry run, time-based, or full run
     - name: Run GitHub JIRA Core Workflow
       run: |
-        cd scripts
         # Manual trigger: use workflow_dispatch inputs
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           DRY_RUN="${{ github.event.inputs.dry_run }}"
@@ -103,14 +102,14 @@ jobs:
             echo "⏰ Running in TIME-BASED mode (last $SINCE_MINUTES min)"
           fi
           if [ -n "$DRY_RUN_FLAG" ]; then
-            python monitor_v1.py $DRY_RUN_FLAG
+            python -m scripts.monitor_v1 $DRY_RUN_FLAG
           elif [ -n "$SINCE_FLAG" ]; then
-            python monitor_v1.py $SINCE_FLAG
+            python -m scripts.monitor_v1 $SINCE_FLAG
           else
-            python monitor_v1.py
+            python -m scripts.monitor_v1
           fi
         else
           # Scheduled trigger: always run time-based (last 10 min)
           echo "⏰ Scheduled trigger: Running time-based (last 10 min)"
-          python monitor_v1.py --since_minutes 10
+          python -m scripts.monitor_v1 --since_minutes 10
         fi

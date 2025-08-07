@@ -95,22 +95,22 @@ jobs:
           DRY_RUN_FLAG=""
           SINCE_FLAG=""
           if [ "$DRY_RUN" = "true" ]; then
-            DRY_RUN_FLAG="--dry-run"
+            DRY_RUN_FLAG="--dry_run True"
             echo "🧪 Running in DRY RUN mode"
           fi
           if [ -n "$SINCE_MINUTES" ]; then
-            SINCE_FLAG="--since $SINCE_MINUTES"
+            SINCE_FLAG="--since_minutes $SINCE_MINUTES"
             echo "⏰ Running in TIME-BASED mode (last $SINCE_MINUTES min)"
           fi
           if [ -n "$DRY_RUN_FLAG" ]; then
-            python github_jira_monitor.py $DRY_RUN_FLAG
+            python monitor_v1.py $DRY_RUN_FLAG
           elif [ -n "$SINCE_FLAG" ]; then
-            python github_jira_monitor.py $SINCE_FLAG
+            python monitor_v1.py $SINCE_FLAG
           else
-            python github_jira_monitor.py
+            python monitor_v1.py
           fi
         else
           # Scheduled trigger: always run time-based (last 10 min)
           echo "⏰ Scheduled trigger: Running time-based (last 10 min)"
-          python github_jira_monitor.py --since 10
+          python monitor_v1.py --since_minutes 10
         fi

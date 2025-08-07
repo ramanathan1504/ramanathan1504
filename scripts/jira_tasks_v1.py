@@ -154,7 +154,8 @@ def _create_jira_task_from_grouped_data(self, repo_owner, repo_name, issue_num, 
     comments_data = self._get_issue_comments_for_task(repo_owner, repo_name, issue_num)
     first_comment = comments_data.get('first_comment', issue_body or 'No description available')
     subsequent_comments = comments_data.get('subsequent_comments', [])
-    activity_log = self._create_activity_log_from_events(issue_data.get('events', []))
+    from . import comments_v1
+    activity_log = comments_v1.create_activity_log_from_events(issue_data.get('events', []))
     task_description = f"""{task_type}
 \n*Repository:* {repo_owner}/{repo_name}
 *Issue/PR:* #{issue_num} - {issue_title}

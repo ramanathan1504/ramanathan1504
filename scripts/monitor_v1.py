@@ -14,6 +14,16 @@ from . import jira_tasks_v1
 
 from .placeholders_v1 import MonitorPlaceholders
 
+# --- Centralized config validation ---
+def validate_config():
+    required_env = [
+        'GH_USER', 'GH_TOKEN', 'JIRA_DOMAIN', 'JIRA_PROJECT', 'JIRA_AUTH'
+    ]
+    missing = [k for k in required_env if not os.environ.get(k)]
+    if missing:
+        print(f"\n❌ ERROR: Missing required config: {', '.join(missing)}. Please check your .env, secrets, or workflow configuration.")
+        exit(1)
+
 class GitHubJIRAMonitor(MonitorPlaceholders):
     def update_jira_status(self, task_key, status, dry_run=False):
         """Delegate to jira_api_v1.update_jira_status for modular access."""
@@ -374,5 +384,6 @@ class GitHubJIRAMonitor(MonitorPlaceholders):
 
 # v1.py style main guard and usage example
 if __name__ == "__main__":
+    validate_config()
     monitor = GitHubJIRAMonitor()
     monitor.run_core_workflow(max_pages=10, since_minutes=None, dry_run=True)

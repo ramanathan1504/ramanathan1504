@@ -8,7 +8,7 @@ on:
 
   # 2. Runs the workflow on a schedule
   schedule:
-    # This is a CRON string that means "run at the 0, 10, 20, 30, 40, and 50-minute mark of every hour"
+    # This is a CRON string that means "run every 10 minutes"
     - cron: '*/10 * * * *'
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
@@ -32,14 +32,22 @@ jobs:
           distribution: 'temurin'
 
       # Step 3: Gives the Gradle wrapper executable permissions
+      # DEFINITIVE FIX: Run this command inside the /app directory
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
+        working-directory: ./app
 
       # Step 4: Builds the application and creates the single, executable "fat JAR"
+      # DEFINITIVE FIX: Run this command inside the /app directory
       - name: Build with Gradle
         run: ./gradlew shadowJar
+        working-directory: ./app
 
-      # Step 5: Runs the compiled Java application with the correct filename and arguments
+      # Step 5 (Optional but Recommended): List the files for debugging
+      - name: List built files
+        run: ls -R app/build
+
+      # Step 6: Runs the compiled Java application
       - name: Run GitHub to Jira Sync
         env:
           # These secrets must be configured in your GitHub repository settings
@@ -49,5 +57,5 @@ jobs:
           JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
-        # DEFINITIVE FIX: The filename now correctly includes the version number.
-        run: java -jar build/libs/github-jira-monitor-1.0.0-all.jar 10 100 1
+        # DEFINITIVE FIX: Use the correct path to the JAR file and a wildcard for robustness.
+        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 90000 100 1

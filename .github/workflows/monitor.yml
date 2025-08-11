@@ -1,115 +1,53 @@
-name: Ongoing GitHub JIRA Monitor
-# This workflow handles ongoing monitoring and lifecycle tracking.
-# For one-time migrations, use the separate github-jira-one-time-migration.yml workflow.
-#
-# ONGOING MONITORING CAPABILITIES:
-# - Comments on issues/PRs (IssueCommentEvent) 
-# - Code review comments (PullRequestReviewCommentEvent)
-# - New PRs you create (PullRequestEvent - opened)
-# - New issues you create (IssuesEvent - opened)
-# - Push events for In Progress status tracking
-# - Author detection for PRs/issues (even without comments)
-# - Mention detection (@ramanathan1504) with smart status assignment
-# - Fork repository detection for intelligent status flow
-#
-# RELEASE TRACKING:
-# - Automatic Done → Released status transitions
-# - Release tag monitoring
-# - Merged PR release detection
-#
-# STATUS FLOW:
-# Discussion → Todo → In Progress → Pull Request → Done → Released
-#
-# Runs automatically on schedule with manual trigger options
+# Name of the GitHub Actions workflow
+name: GitHub to Jira Sync Monitor
 
+# Controls when the action will run.
 on:
-  # Scheduled execution - runs automatically every 10 minutes for monitoring
-  # and every hour for release checking
-  schedule:
-    # Main monitoring: every 10 minutes
-    - cron: '*/10 * * * *'
-    # Release checking: every hour at minute 0
-    - cron: '0 * * * *'
-  
-  # Manual execution - allows running the workflow with custom parameters
+  # 1. Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run mode (true/false)'
-        required: false
-        default: 'false'
-      since_minutes:
-        description: 'Look back this many minutes for events (leave blank for full run, or set for time-based run)'
-        required: false
-        default: ''
 
-# Environment variables - these secrets must be configured in GitHub repository settings
-env:
-  # GitHub configuration
-  # Secret name: GH_USER (configured in repository settings > Secrets and variables > Actions)
-  GH_USER: ${{ secrets.GH_USER }}
-  # Secret name: GH_TOKEN (configured in repository settings > Secrets and variables > Actions)
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
-  
-  # JIRA configuration
-  # Secret name: JIRA_DOMAIN (configured in repository settings > Secrets and variables > Actions)
-  JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
-  # Secret name: JIRA_PROJECT (configured in repository settings > Secrets and variables > Actions)  
-  JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
-  # Secret name: JIRA_AUTH (configured in repository settings > Secrets and variables > Actions)
-  JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
-  
-  # Optional: Organizations to skip (comma-separated)
-  # Secret name: SKIP_ORGS (configured in repository settings > Secrets and variables > Actions)
-  SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
+  # 2. Runs the workflow on a schedule
+  schedule:
+    # This is a CRON string that means "run at the 0, 10, 20, 30, 40, and 50-minute mark of every hour"
+    - cron: '*/10 * * * *'
 
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # Main job that runs the comprehensive GitHub-JIRA monitoring and release checking
-  git-jira-monitor:
+  # The single job in this workflow is called "sync"
+  sync:
+    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    # Step 1: Download the repository code to the runner
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    # Step 2: Set up Python environment for running our monitoring script
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    # Step 3: Install required Python packages
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests python-dotenv
-        
-    # Step 4: Execute core workflow in one of three modes: dry run, time-based, or full run
-    - name: Run GitHub JIRA Core Workflow
-      run: |
-        # Manual trigger: use workflow_dispatch inputs
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          DRY_RUN="${{ github.event.inputs.dry_run }}"
-          SINCE_MINUTES="${{ github.event.inputs.since_minutes }}"
-          DRY_RUN_FLAG=""
-          SINCE_FLAG=""
-          if [ "$DRY_RUN" = "true" ]; then
-            DRY_RUN_FLAG="--dry_run True"
-            echo "🧪 Running in DRY RUN mode"
-          fi
-          if [ -n "$SINCE_MINUTES" ]; then
-            SINCE_FLAG="--since_minutes $SINCE_MINUTES"
-            echo "⏰ Running in TIME-BASED mode (last $SINCE_MINUTES min)"
-          fi
-          if [ -n "$DRY_RUN_FLAG" ]; then
-            python -m scripts.monitor_v1 $DRY_RUN_FLAG
-          elif [ -n "$SINCE_FLAG" ]; then
-            python -m scripts.monitor_v1 $SINCE_FLAG
-          else
-            python -m scripts.monitor_v1
-          fi
-        else
-          # Scheduled trigger: always run time-based (last 10 min)
-          echo "⏰ Scheduled trigger: Running time-based (last 10 min)"
-          python -m scripts.monitor_v1 --since_minutes 10
-        fi
+      # Step 1: Checks-out your repository under $GITHUB_WORKSPACE, so the job can access it
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Sets up the specific version of Java required by your project
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      # Step 3: Gives the Gradle wrapper executable permissions
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      # Step 4: Builds the application and creates the single, executable "fat JAR"
+      - name: Build with Gradle
+        run: ./gradlew shadowJar
+
+      # Step 5: Runs the compiled Java application with the specified arguments and secrets
+      - name: Run GitHub to Jira Sync
+        env:
+          # These secrets must be configured in your GitHub repository settings
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
+          JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+          JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+          SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
+        run: java -jar build/libs/github-jira-monitor-1.0.0-all.jar 10 100 1
+

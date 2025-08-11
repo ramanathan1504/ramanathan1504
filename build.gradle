@@ -1,0 +1,10 @@
+plugins {
+    // Only declare the external plugin here
+    id 'com.github.johnrengelman.shadow' version '7.1.2' apply false
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+    }
+}

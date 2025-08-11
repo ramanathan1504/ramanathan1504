@@ -50,3 +50,4 @@ jobs:
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
         run: java -jar build/libs/github-jira-monitor-1.0.0-all.jar 10 100 1
+

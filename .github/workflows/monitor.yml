@@ -1,59 +1,40 @@
-# Name of the GitHub Actions workflow
 name: GitHub to Jira Sync Monitor
 
-# Controls when the action will run.
 on:
-  # 1. Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-  # 2. Runs the workflow on a schedule
   schedule:
-    # This is a CRON string that means "run every 10 minutes"
     - cron: '*/10 * * * *'
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # The single job in this workflow is called "sync"
   sync:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Step 1: Checks-out your repository under $GITHUB_WORKSPACE, so the job can access it
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Sets up the specific version of Java required by your project
       - name: Set up JDK 11
         uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'temurin'
 
-      # Step 3: Gives the Gradle wrapper executable permissions
-      # DEFINITIVE FIX: The 'gradlew' script is in the root directory.
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      # Step 4: Builds the application and creates the single, executable "fat JAR"
-      # DEFINITIVE FIX: Run the build command from the root, but target the 'app' sub-project.
       - name: Build with Gradle
+        # DEFINITIVE FIX: Use the correct command for a multi-project build
         run: ./gradlew :app:shadowJar
 
-      # Step 5 (Optional but Recommended): List the files for debugging
-      - name: List built files
+      - name: List built files for debugging
         run: ls -R app/build/libs
 
-      # Step 6: Runs the compiled Java application
       - name: Run GitHub to Jira Sync
         env:
-          # These secrets must be configured in your GitHub repository settings
           GH_USER: ${{ secrets.GH_USER }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
           JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
-        # DEFINITIVE FIX: Use the correct path to the JAR inside the 'app' directory's build output.
+        # DEFINITIVE FIX: Use the correct path to the JAR file
         run: java -jar app/build/libs/github-jira-monitor-*-all.jar 10 100 1

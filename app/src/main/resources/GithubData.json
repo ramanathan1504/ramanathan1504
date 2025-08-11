@@ -1,0 +1,140 @@
+{
+  "apache/logging-log4j2": {
+    "2726": {
+      "issueDetails": {
+        "number": 2726,
+        "title": "JndiLookup will not substitute environment variables when using an upper-case name",
+        "body": "#### The Problem\n\nWhen using a lookup for an environment variable using `jndi:env/MY_VARIABLE` the lookup does not work when `MY_VARIABLE` is upper-case. The code in `JndiLookup` that normalizes the key by converting it to lower-case is incorrect.\n\n#### To Reproduce\n\n1. Define an environment variable `MY_VARIABLE=some_value`.\n2. Use the lookup `${jndi:env/MY_VARIABLE}` in `log4j2.xml`.\n3. The variable is not substituted.\n\nThis is a regression from previous versions.",
+        "htmlUrl": "https://github.com/apache/logging-log4j2/issues/2726",
+        "state": "open",
+        "user": {
+          "login": "a-github-user"
+        },
+        "createdAt": "2025-08-01T10:00:00Z",
+        "pullRequest": null,
+        "commentsUrl": "https://api.github.com/repos/apache/logging-log4j2/issues/2726/comments"
+      },
+      "prInfo": {
+        "hasPr": true,
+        "isPrItself": false,
+        "prNumber": 3874,
+        "prState": "open",
+        "isMerged": false,
+        "prBranch": "feature/fix-jndi-lookup"
+      },
+      "finalStatus": "IN PROGRESS",
+      "statusReasons": [
+        "Activity (comment/push) on an open PR"
+      ],
+      "events": [
+        {
+          "type": "IssuesEvent",
+          "repo": { "name": "apache/logging-log4j2" },
+          "payload": {
+            "action": "opened",
+            "issue": { "number": 2726 }
+          },
+          "createdAt": "2025-08-01T10:00:00Z"
+        },
+        {
+          "type": "IssueCommentEvent",
+          "repo": { "name": "apache/logging-log4j2" },
+          "payload": {
+            "action": "created",
+            "issue": { "number": 2726 },
+            "comment": {
+              "body": "I can take a look at this.",
+              "user": { "login": "ramanathan" }
+            }
+          },
+          "createdAt": "2025-08-02T12:30:00Z"
+        },
+        {
+          "type": "PullRequestEvent",
+          "repo": { "name": "apache/logging-log4j2" },
+          "payload": {
+            "action": "opened",
+            "pullRequest": {
+              "number": 3874,
+              "title": "Fix: Ensure jvmrunargs lookup is always registered (fixes #2726)",
+              "body": "The body of the pull request..."
+            }
+          },
+          "createdAt": "2025-08-05T15:00:00Z"
+        },
+        {
+          "type": "IssueCommentEvent",
+          "repo": { "name": "apache/logging-log4j2" },
+          "payload": {
+            "action": "created",
+            "issue": { "number": 3874 },
+            "comment": {
+              "body": "Thanks for the PR! Could you please add a unit test?",
+              "user": { "login": "a-maintainer" }
+            }
+          },
+          "createdAt": "2025-08-06T09:00:00Z"
+        }
+      ]
+    }
+  },
+  "jreleaser/jreleaser": {
+    "1939": {
+      "issueDetails": {
+        "number": 1939,
+        "title": "fix(packagers): ensure org.opencontainers.image.source is set in Docker labels",
+        "body": "This PR ensures that the `org.opencontainers.image.source` label is correctly set on Docker images, pointing back to the source repository.\n\nFixes #1933",
+        "htmlUrl": "https://github.com/jreleaser/jreleaser/pull/1939",
+        "state": "closed",
+        "user": {
+          "login": "another-github-user"
+        },
+        "createdAt": "2025-08-07T11:00:00Z",
+        "pullRequest": {
+          "url": "https://api.github.com/repos/jreleaser/jreleaser/pulls/1939",
+          "html_url": "https://github.com/jreleaser/jreleaser/pull/1939"
+        },
+        "commentsUrl": "https://api.github.com/repos/jreleaser/jreleaser/issues/1939/comments"
+      },
+      "prInfo": {
+        "hasPr": true,
+        "isPrItself": true,
+        "prNumber": 1939,
+        "prState": "closed",
+        "isMerged": false,
+        "prBranch": "fix-docker-labels"
+      },
+      "finalStatus": "DISCUSSION",
+      "statusReasons": [
+        "PR closed without merge"
+      ],
+      "events": [
+        {
+          "type": "PullRequestEvent",
+          "repo": { "name": "jreleaser/jreleaser" },
+          "payload": {
+            "action": "opened",
+            "pullRequest": {
+              "number": 1939,
+              "title": "fix(packagers): ensure org.opencontainers.image.source is set in Docker labels",
+              "body": "Fixes #1933"
+            }
+          },
+          "createdAt": "2025-08-07T11:00:00Z"
+        },
+        {
+          "type": "PullRequestEvent",
+          "repo": { "name": "jreleaser/jreleaser" },
+          "payload": {
+            "action": "closed",
+            "pullRequest": {
+              "number": 1939,
+              "merged": false
+            }
+          },
+          "createdAt": "2025-08-09T18:00:00Z"
+        }
+      ]
+    }
+  }
+}

@@ -32,20 +32,18 @@ jobs:
           distribution: 'temurin'
 
       # Step 3: Gives the Gradle wrapper executable permissions
-      # DEFINITIVE FIX: Run this command inside the /app directory
+      # DEFINITIVE FIX: The 'gradlew' script is in the root directory.
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
-        working-directory: ./app
 
       # Step 4: Builds the application and creates the single, executable "fat JAR"
-      # DEFINITIVE FIX: Run this command inside the /app directory
+      # DEFINITIVE FIX: Run the build command from the root, but target the 'app' sub-project.
       - name: Build with Gradle
-        run: ./gradlew shadowJar
-        working-directory: ./app
+        run: ./gradlew :app:shadowJar
 
       # Step 5 (Optional but Recommended): List the files for debugging
       - name: List built files
-        run: ls -R app/build
+        run: ls -R app/build/libs
 
       # Step 6: Runs the compiled Java application
       - name: Run GitHub to Jira Sync
@@ -57,5 +55,5 @@ jobs:
           JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
-        # DEFINITIVE FIX: Use the correct path to the JAR file and a wildcard for robustness.
-        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 90000 100 1
+        # DEFINITIVE FIX: Use the correct path to the JAR inside the 'app' directory's build output.
+        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 10 100 1

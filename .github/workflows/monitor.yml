@@ -1,3 +1,7 @@
+
+#### **4. File: `.github/workflows/monitor.yml` (Complete and Final Version)**
+*This file should also already be correct, but please verify it.*
+```yaml
 name: GitHub to Jira Sync Monitor
 
 on:
@@ -22,11 +26,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        # DEFINITIVE FIX: Use the correct command for a multi-project build
         run: ./gradlew :app:shadowJar
-
-      - name: List built files for debugging
-        run: ls -R app/build/libs
 
       - name: Run GitHub to Jira Sync
         env:
@@ -36,5 +36,4 @@ jobs:
           JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
-        # DEFINITIVE FIX: Use the correct path to the JAR file
-        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 10 100 1
+        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 90000 100 1

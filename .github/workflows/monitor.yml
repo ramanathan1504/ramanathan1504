@@ -1,7 +1,3 @@
-
-#### **4. File: `.github/workflows/monitor.yml` (Complete and Final Version)**
-*This file should also already be correct, but please verify it.*
-```yaml
 name: GitHub to Jira Sync Monitor
 
 on:

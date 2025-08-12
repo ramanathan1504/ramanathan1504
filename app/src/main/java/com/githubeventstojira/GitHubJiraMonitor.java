@@ -563,11 +563,8 @@ public class GitHubJiraMonitor {
         // Priority 7: COMMENT ONLY / FALLBACK (includes closed PRs) -> DISCUSSION
         else {
             status = "DISCUSSION";
-            if (prInfo != null && "closed".equals(prInfo.prState)) {
-                reasons.add("PR closed without merge");
-            } else {
-                reasons.add("Comment activity only");
-            }
+            reasons.add("Comment activity only");
+            
         }
         return Map.of("status", status, "reasons", reasons);
     }

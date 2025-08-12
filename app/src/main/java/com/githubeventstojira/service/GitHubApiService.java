@@ -15,6 +15,62 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class GitHubApiService {
+    // Check if a repository has any releases
+    public boolean hasReleases(String owner, String repo) throws IOException {
+        List<GitHubData.Release> releases = fetchReleases(owner, repo, 1);
+        return !releases.isEmpty();
+    }
+    // List branches for a repository
+    public List<GitHubData.Branch> listBranches(String owner, String repo) throws IOException {
+        String url = String.format("%s/repos/%s/%s/branches", API_BASE, owner, repo);
+        Request request = newAuthenticatedRequest().url(url).build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                return mapper.readValue(response.body().string(), new TypeReference<>() {});
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    // List commits for a repository or branch
+    public List<GitHubData.Commit> listCommits(String owner, String repo, String branch) throws IOException {
+        String url = String.format("%s/repos/%s/%s/commits", API_BASE, owner, repo);
+        HttpUrl.Builder urlBuilder = Objects.requireNonNull(HttpUrl.parse(url)).newBuilder();
+        if (branch != null && !branch.isEmpty()) {
+            urlBuilder.addQueryParameter("sha", branch);
+        }
+        Request request = newAuthenticatedRequest().url(urlBuilder.build()).build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                return mapper.readValue(response.body().string(), new TypeReference<>() {});
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    // List forks for a repository
+    public List<GitHubData.Fork> listForks(String owner, String repo) throws IOException {
+        String url = String.format("%s/repos/%s/%s/forks", API_BASE, owner, repo);
+        Request request = newAuthenticatedRequest().url(url).build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                return mapper.readValue(response.body().string(), new TypeReference<>() {});
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    // List comments on a pull request (not review comments)
+    public List<GitHubData.Comment> getPullRequestComments(String owner, String repo, long prNum) throws IOException {
+        String url = String.format("%s/repos/%s/%s/issues/%d/comments", API_BASE, owner, repo, prNum);
+        Request request = newAuthenticatedRequest().url(url).build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                return mapper.readValue(response.body().string(), new TypeReference<>() {});
+            }
+        }
+        return Collections.emptyList();
+    }
     private static final Logger logger = LoggerFactory.getLogger(GitHubApiService.class);
     private final OkHttpClient client;
     private final ObjectMapper mapper;

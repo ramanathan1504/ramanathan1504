@@ -29,6 +29,7 @@ public class GitHubJiraMonitor {
     private final ObjectMapper mapper = new ObjectMapper();
     private String epicLinkFieldId;
 
+    private final String jiraAssignee;
     public GitHubJiraMonitor() {
         this.githubUser = Objects.requireNonNull(System.getenv("GH_USER"), "Environment variable GH_USER must be set.");
         this.jiraProject = Objects.requireNonNull(System.getenv("JIRA_PROJECT"), "Environment variable JIRA_PROJECT must be set.");
@@ -42,6 +43,7 @@ public class GitHubJiraMonitor {
         this.skipOrgs.removeIf(String::isEmpty);
         this.gitHubApiService = new GitHubApiService(githubToken, this.githubUser);
         this.jiraApiService = new JiraApiService(jiraDomain, jiraProject, jiraAuth);
+        this.jiraAssignee = System.getenv("JIRA_ASSIGNEE") != null ? System.getenv("JIRA_ASSIGNEE") : this.githubUser;
     }
     // endregion
 
@@ -263,13 +265,15 @@ public class GitHubJiraMonitor {
         String taskSummary = String.format("#%d - %s", details.number, details.title);
         String description = buildCleanJiraDescription(owner, name, details, firstCommentBody);
 
-        ObjectNode payload = mapper.createObjectNode();
-        ObjectNode fields = payload.putObject("fields");
-        fields.putObject("project").put("key", this.jiraProject);
-        fields.put("summary", taskSummary);
-        fields.put("description", description);
-        fields.putObject("issuetype").put("name", "Task");
-        fields.putArray("labels").add(name);
+    ObjectNode payload = mapper.createObjectNode();
+    ObjectNode fields = payload.putObject("fields");
+    fields.putObject("project").put("key", this.jiraProject);
+    fields.put("summary", taskSummary);
+    fields.put("description", description);
+    fields.putObject("issuetype").put("name", "Task");
+    fields.putArray("labels").add(name);
+    // Assign the user
+    fields.putObject("assignee").put("name", this.jiraAssignee);
 
         Optional<String> newKeyOpt = jiraApiService.createIssue(payload);
         if (newKeyOpt.isPresent()) {
@@ -297,9 +301,12 @@ public class GitHubJiraMonitor {
     }
     
     private void updateJiraTaskForPrActivity(String existingTaskKey, GroupedIssueData prData) throws IOException {
-        String newStatus = mapStatusToJiraWorkflow(prData.finalStatus);
-        jiraApiService.updateIssueStatus(existingTaskKey, newStatus);
-        logger.info("    🔄 Silently updated status for task {} to '{}' based on PR activity.", existingTaskKey, newStatus);
+    String newStatus = mapStatusToJiraWorkflow(prData.finalStatus);
+    jiraApiService.updateIssueStatus(existingTaskKey, newStatus);
+    // Assign the user
+    jiraApiService.updateIssueLabels(existingTaskKey, null); // No label change, but triggers update
+    jiraApiService.updateIssueAssignee(existingTaskKey, this.jiraAssignee);
+    logger.info("    🔄 Silently updated status for task {} to '{}' and assigned to '{}' based on PR activity.", existingTaskKey, newStatus, this.jiraAssignee);
     }
     
     // region Helper Methods

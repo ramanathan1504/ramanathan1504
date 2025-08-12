@@ -1,7 +1,3 @@
-    /**
-     * Updates the labels of a Jira issue.
-     */
-   
 package com.githubeventstojira.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -182,6 +178,22 @@ public class JiraApiService {
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 logger.error("    ❌ Failed to update labels: {} {}", response.code(), response.body().string());
+            }
+            return response.isSuccessful();
+        }
+    }
+        public boolean updateIssueAssignee(String issueKey, String assignee) throws IOException {
+        ObjectNode fields = mapper.createObjectNode();
+        fields.putObject("assignee").put("name", assignee);
+        ObjectNode payload = mapper.createObjectNode().set("fields", fields);
+        RequestBody body = RequestBody.create(payload.toString(), JSON);
+        Request request = newAuthenticatedRequest()
+            .url(String.format("https://" + domain + "/rest/api/2/issue/%s", issueKey))
+            .put(body)
+            .build();
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                logger.error("    ❌ Failed to update assignee: {} {}", response.code(), response.body().string());
             }
             return response.isSuccessful();
         }

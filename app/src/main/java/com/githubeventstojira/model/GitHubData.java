@@ -10,6 +10,25 @@ import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GitHubData {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Branch {
+        public String name;
+        public Commit commit;
+        @JsonProperty("protected")
+        public boolean isProtected;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Fork {
+        public long id;
+        public String name;
+        public String full_name;
+        public User owner;
+        @JsonProperty("html_url")
+        public String htmlUrl;
+        @JsonProperty("created_at")
+        public ZonedDateTime createdAt;
+    }
     
     // Base class for any item with a user, body, and creation date
     public static abstract class CommentLike {

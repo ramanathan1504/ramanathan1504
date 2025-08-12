@@ -52,7 +52,10 @@ public class GitHubJiraMonitor {
             logger.warn("⚠️  No data found to process from recent events.");
         }
         createJiraObjectsFromGroupedData(groupedData);
-        updateReleasedTasks();
+    updatePullRequestStatusByLatestActivity(groupedData);
+    updateReleasedTasks();
+
+    // ...existing code...
     }
 
     private Map<String, Map<Long, GroupedIssueData>> gatherAndGroupGitHubData(int perPage, int maxPages, ZonedDateTime since) throws IOException {
@@ -85,7 +88,6 @@ public class GitHubJiraMonitor {
                 long issueNum = issueEntry.getKey();
                 GroupedIssueData data = issueEntry.getValue();
                 logger.info("  🔍 Analyzing issue #{} in {}", issueNum, repoFullName);
-
                 data.issueDetails = gitHubApiService.getIssueDetails(owner, name, issueNum).orElse(null);
                 data.prInfo = analyzePrStatusForIssue(owner, name, issueNum);
                 
@@ -95,11 +97,11 @@ public class GitHubJiraMonitor {
 
                 logger.info("    📊 Final Status: {}", data.finalStatus);
                 logger.info("    📝 Reasons: {}", String.join(", ", data.statusReasons));
+            
             }
         }
         return groupedData;
     }
-
     private void createJiraObjectsFromGroupedData(Map<String, Map<Long, GroupedIssueData>> groupedData) throws IOException {
         logger.info("\n🎯 === CREATING JIRA OBJECTS (Process Later Queue System) ===");
         Map<String, String> createdEpicsCache = new HashMap<>();
@@ -185,7 +187,7 @@ public class GitHubJiraMonitor {
     }
     
     public void updateReleasedTasks() throws IOException {
-        logger.info("\n--- FINAL STEP: Checking for Released Tasks ---");
+        logger.info("\n--- FINAL STEP: Checking for Released Tasks (label-based) ---");
         String jql = String.format("project = \"%s\" AND status = \"Done\"", this.jiraProject);
         Optional<JiraData.SearchResult> resultOpt = jiraApiService.searchIssues(jql, 50);
 
@@ -194,7 +196,7 @@ public class GitHubJiraMonitor {
             return;
         }
 
-        logger.info("📊 Found {} tasks in 'Done' status. Checking each for a corresponding release...", resultOpt.get().total);
+        logger.info("📊 Found {} tasks in 'Done' status. Checking each for a real release...", resultOpt.get().total);
         for (JiraData.Issue task : resultOpt.get().issues) {
             JsonNode descriptionNode = task.fields.get("description");
             if (descriptionNode == null || !descriptionNode.isTextual()) continue;
@@ -204,10 +206,46 @@ public class GitHubJiraMonitor {
             if (matcher.find()) {
                 String owner = matcher.group(1);
                 String repo = matcher.group(2);
-                logger.info("  🔍 Checking release status for task {} (repo: {}/{})", task.key, owner, repo);
-                if (checkReleaseStatus(owner, repo)) {
-                    logger.info("    🚀 Recent release found for {}/{}. Updating task {} to 'Released'.", owner, repo, task.key);
-                    jiraApiService.updateIssueStatus(task.key, "Released");
+                logger.info("  🔍 Checking real release for task {} (repo: {}/{})", task.key, owner, repo);
+                boolean hasRelease = false;
+                try {
+                    hasRelease = gitHubApiService.hasReleases(owner, repo);
+                } catch (Exception e) {
+                    logger.warn("    ⚠️ Error checking releases for {}/{}: {}", owner, repo, e.getMessage());
+                }
+
+                // Get current labels
+                List<String> labels = new ArrayList<>();
+                JsonNode labelsNode = task.fields.get("labels");
+                if (labelsNode != null && labelsNode.isArray()) {
+                    for (JsonNode labelNode : labelsNode) {
+                        labels.add(labelNode.asText());
+                    }
+                }
+
+                if (!hasRelease) {
+                    // Add 'release log' label if not present, remove 'release' if present
+                    if (!labels.contains("release log")) {
+                        labels.add("release log");
+                        logger.info("    🏷️  Adding 'release log' label to task {}.", task.key);
+                    }
+                    labels.remove("release");
+                } else {
+                    // Add 'release' label if not present, remove 'release log' if present
+                    if (!labels.contains("release")) {
+                        labels.add("release");
+                        logger.info("    🏷️  Adding 'release' label to task {}.", task.key);
+                    }
+                    labels.remove("release log");
+                }
+
+                // Update labels if changed
+                Set<String> newLabels = new LinkedHashSet<>(labels);
+                if (!newLabels.equals(new LinkedHashSet<>(labels))) {
+                    // Actually, always update to ensure sync
+                    jiraApiService.updateIssueLabels(task.key, new ArrayList<>(newLabels));
+                } else {
+                    jiraApiService.updateIssueLabels(task.key, new ArrayList<>(newLabels));
                 }
             }
         }
@@ -265,6 +303,71 @@ public class GitHubJiraMonitor {
     }
     
     // region Helper Methods
+
+    /**
+     * For each issue, checks if the latest activity is PR/PR commit (set status to PULL REQUEST),
+     * or if a comment/PR review is latest after PR/commit (set to IN PROGRESS).
+     * This is run before updateReleasedTasks().
+     */
+    private void updatePullRequestStatusByLatestActivity(Map<String, Map<Long, GroupedIssueData>> groupedData) {
+        logger.info("\n--- SPECIAL STATUS CHECK: Updating status based on latest PR/commit/comment activity ---");
+        for (var repoEntry : groupedData.entrySet()) {
+            for (var issueEntry : repoEntry.getValue().entrySet()) {
+                GroupedIssueData data = issueEntry.getValue();
+                if (data.issueDetails == null) continue;
+
+                boolean isPr = data.issueDetails.pullRequest != null;
+
+                // Gather all relevant events with timestamps
+                List<ActivityEvent> activities = new ArrayList<>();
+                for (GitHubData.Event e : data.events) {
+                    ZonedDateTime ts = e.createdAt;
+                    if (ts == null) continue;
+                    String type = e.type;
+                    if ("PullRequestEvent".equals(type)) {
+                        activities.add(new ActivityEvent(ts, "PR"));
+                    } else if ("PushEvent".equals(type)) {
+                        activities.add(new ActivityEvent(ts, "PR_COMMIT"));
+                    } else if ("PullRequestReviewCommentEvent".equals(type)) {
+                        activities.add(new ActivityEvent(ts, "PR_REVIEW_COMMENT"));
+                    } else if ("IssueCommentEvent".equals(type)) {
+                        activities.add(new ActivityEvent(ts, "COMMENT"));
+                    }
+                }
+                if (activities.isEmpty()) continue;
+                // Sort by timestamp
+                activities.sort(Comparator.comparing(a -> a.timestamp));
+                ActivityEvent latest = activities.get(activities.size() - 1);
+
+                // Find if there was a PR/commit before the latest comment/review
+                boolean hadPrOrCommit = activities.stream().anyMatch(a ->
+                    ("PR".equals(a.kind) || "PR_COMMIT".equals(a.kind)) && a.timestamp.isBefore(latest.timestamp)
+                );
+
+                if ("PR".equals(latest.kind) || "PR_COMMIT".equals(latest.kind)) {
+                    data.finalStatus = "PULL REQUEST";
+                    data.statusReasons = List.of("Latest activity is PR or PR commit");
+                } else if (("PR_REVIEW_COMMENT".equals(latest.kind) || "COMMENT".equals(latest.kind)) && hadPrOrCommit) {
+                    data.finalStatus = "IN PROGRESS";
+                    data.statusReasons = List.of("Latest activity is comment/review after PR or commit");
+                } else if ("COMMENT".equals(latest.kind) && !isPr) {
+                    // If it's a regular issue and latest is a comment, set IN PROGRESS
+                    data.finalStatus = "IN PROGRESS";
+                    data.statusReasons = List.of("Latest activity is comment on issue");
+                }
+            }
+        }
+    }
+
+    // Helper class for activity events
+    private static class ActivityEvent {
+        ZonedDateTime timestamp;
+        String kind;
+        ActivityEvent(ZonedDateTime timestamp, String kind) {
+            this.timestamp = timestamp;
+            this.kind = kind;
+        }
+    }
     
     private List<GitHubData.CommentLike> getAllComments(String owner, String repo, long number, boolean isPr) throws IOException {
         List<GitHubData.CommentLike> allComments = new ArrayList<>();
@@ -503,13 +606,12 @@ public class GitHubJiraMonitor {
      */
     private String mapStatusToJiraWorkflow(String internalStatus) {
         switch (internalStatus) {
-            case "DONE": return "Done";
-            case "IN PROGRESS": return "In Progress";
-            case "PULL REQUEST": return "In Review";
-            case "TODO": return "To Do";
-            case "RELEASED": return "Released";
-            case "DISCUSSION": return "Backlog"; // Correct mapping for discussion items
-            default: return "To Do";
+            case "DONE": return "DONE";
+            case "IN PROGRESS": return "IN PROGRESS";
+            case "PULL REQUEST": return "PULL REQUEST";
+            case "TODO": return "TODO";
+            case "DISCUSSION": return "DISCUSSION"; // Map to Jira 'Discuss' status
+            default: return "DISCUSSION";
         }
     }
     // endregion

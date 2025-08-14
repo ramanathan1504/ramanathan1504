@@ -32,4 +32,4 @@ jobs:
           JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           SKIP_ORGS: ${{ secrets.SKIP_ORGS }}
-        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 30 100 1
+        run: java -jar app/build/libs/github-jira-monitor-*-all.jar 90 100 1

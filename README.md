@@ -19,29 +19,6 @@
 
 ---
 
-```java
-public class Ramanathan implements ApacheCommitter {
-
-    private static final String PROJECT     = "Apache Log4j2";
-    private static final String EMAIL       = "ramanathan@apache.org";
-    private static final int    PRS_MERGED  = 15;
-    private static final int    MONTHS      = 9;
-
-    @Override
-    public String[] expertise() {
-        return new String[]{
-            "Concurrency & Thread Safety",
-            "LMAX Disruptor / Async Logging",
-            "Plugin Architecture",
-            "Timezone-aware Scheduling",
-            "CI/CD & Build Infrastructure"
-        };
-    }
-}
-```
-
----
-
 ## ⚡ Apache Log4j2 Contributions
 
 > Critical infrastructure used by **billions of applications** worldwide.  

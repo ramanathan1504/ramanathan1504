@@ -19,37 +19,6 @@
 
 -----
 
-```java
-public class Ramanathan implements ApacheCommitter, GlobalContributor {
-
-    private static final String   EMAIL        = "ramanathan@apache.org";
-    private static final int      EXPERIENCE   = 7;           // years
-    private static final int      JAVA_YEARS   = 4;
-    private static final String[] ORGS         = {
-        "Apache Software Foundation",
-        "Canonical",
-        "Amazon Web Services",
-        "JReleaser",
-        "Spring (VMware)"
-    };
-
-    @Override
-    public String[] expertise() {
-        return new String[]{
-            "Concurrency & Thread Safety",
-            "LMAX Disruptor / Async Logging",
-            "Plugin Architecture & Builder Patterns",
-            "Distributed Systems & Messaging",
-            "Release Engineering & CI/CD",
-            "Timezone-aware Scheduling",
-            "WebSocket & API Gateway Design"
-        };
-    }
-}
-```
-
------
-
 ## 🏛 Apache Software Foundation — Committer
 
 > **Log4j2** · Critical Java logging infrastructure · Used by billions of applications worldwide  

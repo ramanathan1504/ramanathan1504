@@ -88,18 +88,6 @@ Designed and implemented `WebSocketConnectionContext` — a Lambda-safe session-
 
 -----
 
-## 🛠 Stack
-
-```
-Languages       →  Java (4 yrs)  ·  Node.js (3 yrs)  ·  React (light)
-Messaging       →  Apache Kafka  ·  WebSocket  ·  API Gateway
-Infra           →  Docker  ·  Kubernetes  ·  Redis  ·  Linux
-Release Eng     →  Maven Central  ·  GPG Signing  ·  JReleaser  ·  CI/CD
-Apache Stack    →  Log4j2  ·  Logging Parent  ·  Log4j Samples
-```
-
------
-
 ## 📬 Connect
 
 [![Email](https://img.shields.io/badge/ramanathan@apache.org-D22128?style=flat-square&logo=apache&logoColor=white)](mailto:ramanathan@apache.org)

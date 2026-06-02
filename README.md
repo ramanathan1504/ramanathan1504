@@ -16,9 +16,9 @@
 | Category | Technologies |
 | :--- | :--- |
 | **Languages & Core** | Java, Node.js, JVM Internals, Multi-threading, Concurrency & Thread-Safety |
-| **Cloud & DevOps** | Kubernetes (K8s), AWS (ECR, NLB, ALB, CLB), Persistent Volumes (PV/PVC), Ingress Controllers, Docker, CI/CD, Linux Systems |
-| **Frameworks** | Spring Boot, Spring Security, Spring Cloud, Spring Data JPA, React.js |
-| **Databases & Messaging** | Apache Kafka, PostgreSQL, Meilisearch, Redis |
+| **Cloud & DevOps** | Kubernetes (K8s), AWS (ECR, NLB, CLB), Persistent Volumes (PV/PVC), Ingress Controllers, Docker, CI/CD, Linux Systems |
+| **Frameworks** | Spring Boot, React.js |
+| **Databases & Messaging** | Apache Kafka, PostgreSQL, Redis |
 
 ---
 

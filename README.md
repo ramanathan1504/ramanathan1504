@@ -1,101 +1,47 @@
-<div align="center">
+# Hi there, I'm Ramanathan Muthu! 👋
 
-```
-██████╗  █████╗ ███╗   ███╗ █████╗ ███╗   ██╗ █████╗████████╗██╗  ██╗ █████╗ ███╗   ██╗
-██╔══██╗██╔══██╗████╗ ████║██╔══██╗████╗  ██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗████╗  ██║
-██████╔╝███████║██╔████╔██║███████║██╔██╗ ██║███████║   ██║   ███████║███████║██╔██╗ ██║
-██╔══██╗██╔══██║██║╚██╔╝██║██╔══██║██║╚██╗██║██╔══██║   ██║   ██╔══██║██╔══██║██║╚██╗██║
-██║  ██║██║  ██║██║ ╚═╝ ██║██║  ██║██║ ╚████║██║  ██║   ██║   ██║  ██║██║  ██║██║ ╚████║
-╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝
-```
+### Senior Backend & Cloud-Native Systems Engineer | Apache Log4j Maintainer
 
-### `ramanathan@apache.org`
+<p align="left">
+  <a href="mailto:ramanathan@apache.org"><img src="https://img.shields.io/badge/Email-ramanathan%40apache.org-blue?style=flat-square&logo=apache" alt="Apache Email"></a>
+  <a href="https://people.apache.org/phonebook.html?uid=ramanathan"><img src="https://img.shields.io/badge/ASF-Committer%20Profile-emerald?style=flat-square" alt="ASF Profile"></a>
+  <a href="https://linkedin.com/in/ramanathan1504"><img src="https://img.shields.io/badge/LinkedIn-ramanathan1504-blue?style=flat-square&logo=linkedin" alt="LinkedIn"></a>
+</p>
 
-[![Apache Committer](https://img.shields.io/badge/Apache%20Software%20Foundation-Committer-D22128?style=for-the-badge&logo=apache&logoColor=white)](https://people.apache.org/committer-index.html)
-[![Java](https://img.shields.io/badge/Java-Senior%20Engineer-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://github.com/ramanathan1504)
-[![Open Source](https://img.shields.io/badge/Open%20Source-5%20Orgs-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ramanathan1504)
+---
 
-</div>
+## 🛠️ Tech Stack & Expertise
+* **Languages & Core:** Java, Node.js, JVM Internals, Multi-threading, Concurrency & Thread-Safety
+* **Cloud & DevOps:** Kubernetes (K8s), AWS (ECR, NLB, ALB, CLB), Persistent Volumes (PV/PVC), Ingress Controllers, Docker, CI/CD, Linux Systems
+* **Frameworks:** Spring Boot, Spring Security, Spring Cloud, Spring Data JPA, React.js
+* **Messaging & Databases:** Apache Kafka, PostgreSQL, Meilisearch, Redis
 
------
+---
 
-## 🏛 Apache Software Foundation — Committer
+## 📊 Live GitHub Contributions
+This chart automatically updates in real-time as I push code:
 
-> **Log4j2** · Critical Java logging infrastructure · Used by billions of applications worldwide  
-> Funded by the **European Sovereign Tech Fund (€596,160)** · Post Log4Shell security hardening
+[![Ramanathan's GitHub Contributions](https://ghchart.rshah.org/ramanathan1504)](https://github.com/ramanathan1504)
 
-|# |PR                                          |Area                |Status  |
-|--|--------------------------------------------|--------------------|--------|
-|1 |Improve LMAX Disruptor LinkageError handling|Async / Concurrency |🔄 Review|
-|2 |Revamp `ListAppender` for thread-safety     |Thread Safety       |✅ Merged|
-|3 |Refactor `RegexFilter` to plugin builder    |Plugin Architecture |🔄 Review|
-|4 |Fix NPE in `ConfigurationScheduler`         |Stability           |🔄 Review|
-|5 |Fix `CronExpression` for daylight saving    |Timezone Scheduling |✅ Merged|
-|6 |Fix `createOnDemand` Rolling File Appender  |File I/O            |✅ Merged|
-|7 |Restrict JUnit deps below 6.x               |Build Compatibility |✅ Merged|
-|8 |Synchronization with main backlog           |Concurrency         |✅ Merged|
-|9 |Bump elasticsearch-java to 9.x              |Dependencies        |✅ Merged|
-|10|Fix timezone pattern `GMT+05:30`            |Internationalization|✅ Merged|
-|11|Remove `jvmrunargs` lookup                  |Security            |✅ Merged|
+---
 
-**11 merged · 15 total · 9 months · Apache Committer since May 2026**
+## 🌟 Open-Source Stewardship
 
------
+### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Active Core Maintainer*
+* **Exception Identity Tracking (#4133):** Designed a circular reference detection mechanism utilizing `IdentityHashMap` to handle exceptions with custom `equals`/`hashCode` overrides safely.
+* **Leak Mitigation (#4127):** Fixed critical connection leaks in `ConfigurationSource` to resolve socket and file handle locks on Tomcat redeployments.
+* **Concurrency Redesign (#4111):** Reworked the `ListAppender` class for multithreaded runtime safety, eliminating `ConcurrentModificationException`.
+* **Distributed Cloud Rollover Optimization (#4071):** Implemented randomized compression delays to prevent midnight disk I/O spikes in cloud clusters.
 
-## 🟠 Canonical
+### [Canonical](https://github.com/canonical) — *Recognized Contributor*
+* **FIPS Security Integration (openssl-fips-java #101):** Developed native C translations bridging Java Key objects to OpenSSL 3.x EVP instances via the `OSSL_DECODER` API.
+* **Automated Maven CLI Mapping (devpack-for-spring-cli #78):** Created dynamic goal-to-coordinate mapping logic inside `MavenRunner` to allow arbitrary plugin execution without `pom.xml` declarations.
 
-> **openssl-fips-java** · **devpack-for-spring** · **devpack-for-spring-cli**
+---
 
-- Merged PR — `openssl-fips-java` — FIPS-compliant Java security layer
-- POC implementation and technical review — `openssl-fips-java` issue #7
-- Cross-repo issue verification across `devpack-for-spring` and `devpack-for-spring-cli`
-- Maintainer trusted my technical review to close issues in both repos
+## ⚡ GitHub Stats
 
------
-
-## 🟡 Amazon Web Services
-
-> **aws-lambda-java-libs** · PR #606
-
-Designed and implemented `WebSocketConnectionContext` — a Lambda-safe session-like context for API Gateway WebSocket events.
-
-- Built connection context from `connectionId`, `domainName`, `stage`
-- Added `getManagementApiEndpoint()` — builds `https://{domainName}/{stage}` automatically
-- Full null-safe fallback behaviour — zero new exceptions introduced
-- Non-breaking additive design — all existing code untouched
-- Complete submission: implementation + tests + README + changelog
-
------
-
-## 🔵 JReleaser
-
-> Java release automation tool used by thousands of projects to publish to Maven Central
-
-|PR   |Fix                                                     |Status  |
-|-----|--------------------------------------------------------|--------|
-|#1954|Maven Central — log staged repository URI after creation|✅ Merged|
-|#1931|Clear 401/403 error messages for MavenCentral deploy    |✅ Merged|
-|#1940|Fail release if GPG signing key is expired              |✅ Merged|
-
------
-
-## 🍃 Spring Kafka — VMware/Pivotal
-
-> Official Spring Framework Kafka integration — used by millions of Spring Boot applications
-
-- **Issue #3812** — Provided `ProducerInterceptor` solution for Kafka message logging · Maintainer closed issue using my solution
-- **Issue #3776** — Documented delayed messaging patterns in Kafka + Spring Kafka · Maintainer closed issue using my solution
-
------
-
-## 📬 Connect
-
-[![Email](https://img.shields.io/badge/ramanathan@apache.org-D22128?style=flat-square&logo=apache&logoColor=white)](mailto:ramanathan@apache.org)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://linkedin.com/in/ramanathan1504)
-[![Apache Profile](https://img.shields.io/badge/ASF%20People-apache.org-D22128?style=flat-square&logo=apache&logoColor=white)](https://people.apache.org/committer-index.html)
-
------
-
-<div align="center">
-<sub>Apache Committer · Log4j2 · AWS · Canonical · JReleaser · Spring Kafka · ramanathan@apache.org</sub>
-</div>
+<p align="left">
+  <img src="https://github-readme-stats.vercel.app/api?username=ramanathan1504&show_icons=true&theme=dark" alt="Ramanathan's Stats" width="48%" />
+  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=ramanathan1504&layout=compact&theme=dark" alt="Top Languages" width="48%" />
+</p>

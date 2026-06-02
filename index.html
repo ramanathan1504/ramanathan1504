@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ramanathan Muthu - Resume</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CRITICAL PRINT SYSTEM OVERRIDES */
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                /* Force browser to print colors/gradients */
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            
+            /* Hide web-only elements */
+            .no-print {
+                display: none !important;
+            }
+            
+            /* Reset container wrapping styles for page sizing */
+            .print-wrapper {
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: 100% !important;
+                border-radius: 0 !important;
+            }
+
+            /* FLEXBOX FOR PRINT LAYOUT */
+            .print-grid {
+                display: flex !important;
+                flex-direction: row !important;
+                width: 100% !important;
+            }
+            .print-sidebar {
+                display: block !important;
+                width: 30% !important; /* Sidebar takes 30% */
+                background: none !important;
+                border-right: 1px solid #cbd5e1 !important;
+                padding-right: 16px !important;
+                box-sizing: border-box !important;
+            }
+            .print-main {
+                display: block !important;
+                width: 70% !important; /* Main content takes 70% */
+                padding-left: 16px !important;
+                box-sizing: border-box !important;
+            }
+
+            /* COMPACT SIDEBAR RULES TO ENSURE IT FITS 100% ON PAGE 1 */
+            .print-sidebar h2 {
+                font-size: 14px !important;
+                margin-bottom: 4px !important;
+                padding-bottom: 2px !important;
+            }
+            .print-sidebar p, .print-sidebar span {
+                font-size: 11px !important;
+                line-height: 1.3 !important;
+            }
+            .print-sidebar .mb-8 {
+                margin-bottom: 12px !important;
+            }
+
+            /* TIGHTEN VERTICAL MARGINS FOR THE MAIN COLUMN */
+            h2 {
+                margin-bottom: 6px !important;
+                padding-bottom: 2px !important;
+            }
+            .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+                margin-top: 14px !important;
+            }
+            .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+                margin-top: 10px !important;
+            }
+            .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+                margin-top: 8px !important;
+            }
+            ul {
+                margin-top: 3px !important;
+            }
+            li {
+                margin-bottom: 3px !important;
+            }
+
+            /* Keep logical groups together */
+            .page-break-inside-avoid {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            /* Configure Standard A4 Margins */
+            @page {
+                size: A4 portrait;
+                margin: 8mm 10mm 8mm 10mm;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased">
+
+    <!-- TOP NAVIGATION / ACTION BAR (Will not show in printed PDF) -->
+    <div class="no-print bg-indigo-900 text-white p-4 text-center shadow-md">
+        <p class="mb-2 font-medium">✨ Ready to generate your PDF? Press Ctrl+P (or Cmd+P on Mac) and choose "Save as PDF"!</p>
+        <button onclick="window.print()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+            Print / Save to PDF
+        </button>
+    </div>
+
+    <!-- MAIN RESUME CONTAINER -->
+    <div class="print-wrapper max-w-5xl mx-auto my-8 bg-white shadow-xl rounded-lg overflow-hidden border border-gray-200">
+        
+        <!-- HEADER SECTION -->
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-8 border-b-4 border-emerald-500" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div>
+                    <h1 class="text-4xl font-extrabold tracking-tight text-white">RAMANATHAN MUTHU</h1>
+                    <p class="text-emerald-400 font-semibold text-lg mt-1 tracking-wider">Senior Backend & Cloud-Native Systems Engineer</p>
+                    <p class="text-gray-300 text-sm mt-1">Official Apache Log4j Committer & Maintainer</p>
+                </div>
+                <div class="mt-4 md:mt-0 text-left md:text-right text-sm space-y-1 text-gray-300">
+                    <p class="flex items-center md:justify-end gap-2">
+                        <span>📧 ramanathan@apache.org</span>
+                    </p>
+                    <p class="flex items-center md:justify-end gap-2">
+                        <span>📧 ramanathanbscmca@gmail.com</span>
+                    </p>
+                    <p class="flex items-center md:justify-end gap-2">
+                        <span>📞 +91 9789122033</span>
+                    </p>
+                    <p class="text-gray-400">📍 Chennai, Tamil Nadu, India</p>
+                </div>
+            </div>
+            
+            <!-- LINKS ROW -->
+            <div class="flex flex-wrap gap-4 mt-6 pt-4 border-t border-indigo-900 text-xs text-indigo-200">
+                <a href="https://people.apache.org/phonebook.html?uid=ramanathan" target="_blank" class="hover:text-emerald-400 underline">Apache Phonebook</a>
+                <a href="https://github.com/ramanathan1504" target="_blank" class="hover:text-emerald-400 underline">GitHub Profile</a>
+                <a href="https://linkedin.com/in/ramanathan1504" target="_blank" class="hover:text-emerald-400 underline">LinkedIn Profile</a>
+            </div>
+        </div>
+
+        <!-- TWO-COLUMN LAYOUT -->
+        <div class="print-grid grid grid-cols-1 lg:grid-cols-12">
+            
+            <!-- LEFT SIDEBAR -->
+            <div class="print-sidebar lg:col-span-4 bg-slate-50 p-6 border-r border-gray-200">
+                
+                <!-- SUMMARY -->
+                <div class="mb-8">
+                    <h2 class="text-lg font-bold text-indigo-950 border-b-2 border-indigo-900 pb-2 mb-3 tracking-wide">PROFESSIONAL SUMMARY</h2>
+                    <p class="text-gray-600 text-sm leading-relaxed">
+                        Senior Systems Engineer with over 7 years of expertise driving the design, performance tuning, and orchestration of high-concurrency Java systems. Specializes in JVM internals, open-source governance, and robust cloud deployments.
+                    </p>
+                </div>
+
+                <!-- ATS CORE COMPETENCIES -->
+                <div class="mb-8">
+                    <h2 class="text-lg font-bold text-indigo-950 border-b-2 border-indigo-900 pb-2 mb-3 tracking-wide">CORE COMPETENCIES</h2>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">JVM Internals</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Multi-threading</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Concurrency</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Kubernetes (K8s)</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">AWS ALB/NLB</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Spring Boot</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Spring Kafka</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Docker & ECR</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">CI/CD Pipelines</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">FIPS Compliance</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-900 px-2.5 py-1 rounded" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">API Security</span>
+                    </div>
+                </div>
+
+                <!-- DETAILED SKILLS -->
+                <div class="mb-8 space-y-4">
+                    <h2 class="text-lg font-bold text-indigo-950 border-b-2 border-indigo-900 pb-2 mb-1 tracking-wide">TECHNICAL SKILLS</h2>
+                    <div>
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Languages & Frameworks</h3>
+                        <p class="text-sm text-gray-700 font-medium">Java, Node.js, Spring Boot, Spring Security, Spring Cloud, Spring Data JPA, React.js</p>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Cloud & Infra</h3>
+                        <p class="text-sm text-gray-700 font-medium">Kubernetes, AWS (ECR, NLB, ALB, CLB), Persistent Volumes (PV/PVC), Ingress Controllers, Fluentd, Linux Systems</p>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Messaging & Databases</h3>
+                        <p class="text-sm text-gray-700 font-medium">Apache Kafka, PostgreSQL, Meilisearch, Redis</p>
+                    </div>
+                </div>
+
+                <!-- EDUCATION -->
+                <div>
+                    <h2 class="text-lg font-bold text-indigo-950 border-b-2 border-indigo-900 pb-2 mb-3 tracking-wide">EDUCATION</h2>
+                    <div class="mb-3">
+                        <p class="text-sm font-bold text-gray-800">Master of Computer Applications (MCA)</p>
+                        <p class="text-xs text-gray-600">Guru Nanak College, Chennai</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-gray-800">B.Sc. in Information Technology</p>
+                        <p class="text-xs text-gray-600">NMS SVN College, Madurai</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="print-main lg:col-span-8 p-6 space-y-8">
+                
+                <!-- OPEN SOURCE CONTRIBUTIONS -->
+                <div>
+                    <h2 class="text-xl font-bold text-indigo-950 border-b-2 border-indigo-900 pb-1 mb-4 flex items-center gap-2">
+                        <span class="w-2.5 h-6 bg-emerald-500 inline-block" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;"></span>
+                        OPEN-SOURCE STEWARDSHIP
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <!-- APACHE LOG4J -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex justify-between items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Apache Log4j</h3>
+                                <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Active Core Maintainer</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Exception Identity Tracking (#4133):</strong> Designed a circular reference detection mechanism utilizing `IdentityHashMap` to handle cases where exceptions override standard `equals`/`hashCode` methods, preventing false cyclic triggers.</li>
+                                <li><strong>Socket & File Leak Mitigation (#4127):</strong> Patched critical resource leaks in `ConfigurationSource` where failed `URLConnection` error paths bypassed cleanups, resolving socket leaks and file handle locks on Tomcat redeployments.</li>
+                                <li><strong>Concurrency & Thread-Safety (#4111):</strong> Redesigned `ListAppender` class for multi-threaded applications, substituting legacy synchronization locks with explicit wait/notify mechanisms to prevent `ConcurrentModificationException`.</li>
+                                <li><strong>Distributed I/O Optimization (#4071 / #4067):</strong> Introduced a configurable compression sleep (`maxCompressionDelay`) for roll-over events, spreading concurrent compression cycles to stabilize shared/cloud disk I/O performance at midnight.</li>
+                                <li><strong>Kafka Retry Logic Alignment (#4125):</strong> Refactored the retry loops in `KafkaAppender` to prevent successful retry events from falsely reporting errors to the global system error handler.</li>
+                            </ul>
+                        </div>
+
+                        <!-- CANONICAL & JRELEASER -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex justify-between items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Canonical & JReleaser</h3>
+                                <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Recognized Contributor</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>EVP_PKEY FIPS Conversion (Canonical #101):</strong> Developed a FIPS-compliant native C translation utility bridging Java Key objects to native OpenSSL 3.x EVP instances via the `OSSL_DECODER` API.</li>
+                                <li><strong>Automated Maven CLI Mapping (Canonical #78):</strong> Built goal-to-coordinate mapping logic into `MavenRunner` to allow developers to execute arbitrary Maven plugins without requiring static XML declarations.</li>
+                                <li><strong>GPG Expired Key Hardening (JReleaser #1940):</strong> Enhanced supply chain security verification by converting GPG expiration warnings into pipeline-halting exceptions.</li>
+                                <li><strong>Staging URI Lookup (JReleaser #1954):</strong> Implemented supplementary API lookups to capture the live staging URI in Nexus2 release workflows.</li>
+                            </ul>
+                        </div>
+
+                        <!-- AWS LAMBDA & SPRING KAFKA -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex justify-between items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">AWS Lambda & Spring Kafka</h3>
+                                <span class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-200" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">Contributor</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Serverless Helper (AWS Lambda #606):</strong> Built a session-like `WebSocketConnectionContext` object for handling API Gateway WebSocket events natively within Lambda context definitions.</li>
+                                <li><strong>Observability Interceptors (Spring Kafka #2049):</strong> Designed a customized `ProducerInterceptor` allowing serialization tracing and custom debugging pipelines for secure payload extraction.</li>
+                                <li><strong>Advanced Message Routing (Spring Kafka #2247):</strong> Engineered architectural patterns for implementing scheduled and deferred delivery logic inside active Kafka brokers.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROFESSIONAL EXPERIENCE -->
+                <div>
+                    <h2 class="text-xl font-bold text-indigo-950 border-b-2 border-indigo-900 pb-1 mb-4 flex items-center gap-2">
+                        <span class="w-2.5 h-6 bg-emerald-500 inline-block" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;"></span>
+                        PROFESSIONAL EXPERIENCE
+                    </h2>
+
+                    <div class="space-y-6">
+                        <!-- INTEMO -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Senior Full Stack Developer <span class="text-gray-500 font-normal">| INTEMO</span></h3>
+                                <span class="text-xs text-gray-500 font-medium">07/2023 – Present | Chennai, TN</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Cloud-Native Deployment:</strong> Implemented and managed Kubernetes (K8s) clusters on AWS. Established automated CI/CD pipelines deploying directly from AWS ECR, and utilized PV/PVC structures for stateful database storage requirements.</li>
+                                <li><strong>High-Availability Networking:</strong> Orchestrated secure Layer 4 (Network Load Balancers) and Layer 7 (Application Load Balancers) strategies on AWS to manage traffic load spikes and route API transactions safely.</li>
+                                <li><strong>Bytecode Engineering:</strong> Developed a specialized Java Agent using the Byte Buddy library to execute runtime bytecode manipulation, retrieving non-editable values from secured JVM class definitions.</li>
+                                <li><strong>Systems Integration:</strong> Designed a resilient, distributed transaction automation engine interfacing with API-less ERP software, handling over 10,000 requests daily and scaling performance by 60%.</li>
+                                <li><strong>Enterprise Monitoring:</strong> Structured centralized logging topologies utilizing Fluentd metrics collections to stream container node and ingress load records.</li>
+                            </ul>
+                        </div>
+
+                        <!-- GTECHWEBSOLUTIONS -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Full Stack Developer <span class="text-gray-500 font-normal">| GTECHWEBSOLUTIONS</span></h3>
+                                <span class="text-xs text-gray-500 font-medium">04/2022 – 06/2023 | Chennai, TN</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Real-time Location Engines:</strong> Built a driver-tracking service using Java, WebSockets, and Google Maps API, tracking active telemetry for delivery SLA optimizations.</li>
+                                <li><strong>Enterprise Architecture:</strong> Fabricated central leave audit workflows and custom tax and HRA assessment algorithms using robust Spring Boot microservice architectures.</li>
+                                <li><strong>Biometric Interface Integration:</strong> Coded custom serial API bindings for external biometric fingerprint scanners, linking time-attendance arrays directly into central HRMS databases.</li>
+                                <li><strong>Resource Planning Systems:</strong> Designed a timesheet metrics planning module featuring granular grid charts tracking engineering team allocations.</li>
+                            </ul>
+                        </div>
+
+                        <!-- WEDDINGWISHLIST -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Senior Software Engineer <span class="text-gray-500 font-normal">| WEDDINGWISHLIST</span></h3>
+                                <span class="text-xs text-gray-500 font-medium">01/2022 – 04/2022 | Chennai, TN</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Platform Modernization:</strong> Led the migration of a legacy multisite application to a modern React and Node.js stack, resulting in a 40% improvement in page performance and sub-second navigation.</li>
+                            </ul>
+                        </div>
+
+                        <!-- GEGOSOFT -->
+                        <div class="page-break-inside-avoid">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-1">
+                                <h3 class="text-base font-bold text-gray-900">Junior Developer <span class="text-gray-500 font-normal">| GEGOSOFT</span></h3>
+                                <span class="text-xs text-gray-500 font-medium">03/2019 – 01/2022 | Madurai, TN</span>
+                            </div>
+                            <ul class="list-disc list-outside pl-4 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                                <li><strong>Algorithmic Solutions:</strong> Built complex Bitcoin-based Multi-Level Marketing engines via Express/Node.js, coding custom matrix and binary referral tracking scripts.</li>
+                                <li><strong>DEX Exchanges:</strong> Configured Web3.js UI integrations for secure crypto-wallet syncing and automated Liquidity Pool validations.</li>
+                                <li><strong>Performance Optimizations:</strong> Built backtracking school timetable layout models, indexing raw record data into Meilisearch caches for sub-second GUI lookup calls.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -22,13 +22,6 @@
 
 ---
 
-## 📊 Live GitHub Contributions
-This chart automatically updates in real-time as I push code:
-
-[![Ramanathan's GitHub Contributions](https://ghchart.rshah.org/ramanathan1504)](https://github.com/ramanathan1504)
-
----
-
 ## 🌟 Open-Source Stewardship
 
 ### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Active Core Maintainer*
@@ -84,15 +77,6 @@ This chart automatically updates in real-time as I push code:
 * **Blockchain & Bitcoin MLM Platform:** Engineered a complex Bitcoin-based Multi-Level Marketing (MLM) engine using Node.js. Developed recursive binary and matrix referral algorithms for automated, immutable commission payouts.
 * **Decentralized Exchange (DEX):** Designed and implemented a decentralized exchange interface inspired by Uniswap, utilizing Web3.js for secure wallet integration and automated liquidity pool interaction.
 * **Automated Scheduling Algorithm:** Built a custom automated timetable generation algorithm (KG to 12th) using a backtracking approach and integrated Meilisearch for sub-second record retrieval.
-
----
-
-## ⚡ GitHub Stats
-
-<p align="left">
-  <img src="https://github-readme-stats-fast.vercel.app/api?username=ramanathan1504&show_icons=true&theme=dark" alt="Ramanathan's Stats" width="48%" />
-  <img src="https://github-readme-stats-fast.vercel.app/api/top-langs/?username=ramanathan1504&layout=compact&theme=dark" alt="Top Languages" width="48%" />
-</p>
 
 ---
 

@@ -1,0 +1,74 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Ramanathan Muthu",
+    "email": "ramanathan@apache.org",
+    "description": "Apache Committer and Security Team member for Apache Logging Services (Log4j). Java core libraries engineer and open source contributor based in Madurai, India.",
+    "webpageUrl": {
+      "url": "https://github.com/ramanathan1504"
+    }
+  },
+  "projects": [
+    {
+      "guid": "oss-cli",
+      "name": "oss-cli",
+      "description": "Offline-first prompt intelligence workbench for open-source maintainers.",
+      "webpageUrl": {
+        "url": "https://github.com/ramanathan1504/oss-cli"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/ramanathan1504/oss-cli"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["developer-tools", "cli", "open-source", "productivity"]
+    },
+    {
+      "guid": "knowledge-creator",
+      "name": "knowledge-creator",
+      "description": "Deterministic knowledge harvester that turns your work into a searchable Markdown archive.",
+      "webpageUrl": {
+        "url": "https://github.com/ramanathan1504/knowledge-creator"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/ramanathan1504/knowledge-creator"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["developer-tools", "knowledge-management", "markdown", "productivity"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/ramanathan1504",
+        "description": "Sponsor via GitHub Sponsors."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "monthly-support",
+        "status": "active",
+        "name": "Monthly support",
+        "description": "Recurring sponsorship of any amount supporting ongoing open source maintenance.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": ["github-sponsors"]
+      },
+      {
+        "guid": "one-time-support",
+        "status": "active",
+        "name": "One-time support",
+        "description": "A one-time contribution of any amount.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["github-sponsors"]
+      }
+    ],
+    "history": []
+  }
+}

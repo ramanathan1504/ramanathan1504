@@ -1,6 +1,8 @@
-# Hi there, I'm Ramanathan Muthu! 👋
+# Hi, I'm Ramanathan Muthu 👋
 
-### Senior Backend & Platform Engineer | Apache Log4j Maintainer
+### Java Backend Architect & Developer · Apache Log4j Maintainer
+
+I build reliable, concurrent JVM backends and contribute to the open-source libraries that run them.
 
 <p align="left">
   <a href="mailto:ramanathan@apache.org"><img src="https://img.shields.io/badge/Email-ramanathan%40apache.org-blue?style=flat-square&logo=apache" alt="Apache Email"></a>
@@ -11,75 +13,38 @@
 
 ---
 
-## 🛠️ Tech Stack & Core Competencies
+## 🛠️ Stack
 
-| Category | Technologies |
+| | |
 | :--- | :--- |
-| **Languages & Core** | Java, Node.js, JVM Internals, Multi-threading, Concurrency & Thread-Safety |
-| **Cloud & DevOps** | Kubernetes (K8s), AWS (ECR, NLB, CLB), Persistent Volumes (PV/PVC), Ingress Controllers, Docker, CI/CD, Linux Systems |
-| **Frameworks** | Spring Boot, Spring Security, Spring Cloud, Spring Data JPA, React.js |
-| **Databases & Messaging** | Apache Kafka, PostgreSQL, Redis |
+| **Core** | Java, JVM internals, concurrency & thread-safety |
+| **Frameworks** | Spring Boot, Spring Security, Spring Cloud, Spring Data JPA |
+| **Data & Messaging** | Apache Kafka, PostgreSQL, Redis |
+| **Platform** | Docker, Kubernetes, AWS, CI/CD, Linux |
 
 ---
 
-## 🌟 Open-Source Stewardship
+## 🌟 Open Source
 
-### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Active Core Maintainer*
-* **Exception Identity Tracking (Issue #3933 | PR #4133):** Designed a circular reference detection mechanism utilizing `IdentityHashMap` to handle exceptions with custom `equals`/`hashCode` overrides safely, preventing false cyclic triggers.
-* **Socket & File Leak Mitigation (Issue #4127 | PR #4127):** Patched critical resource leaks in `ConfigurationSource` where failed `URLConnection` error paths bypassed cleanups, resolving socket leaks and file handle locks on Tomcat redeployments.
-* **Concurrency & Thread-Safety (Issue #3926 | PR #4111):** Redesigned the `ListAppender` class for high-concurrency environments, replacing legacy synchronization with granular locking and wait/notify mechanisms to eliminate `ConcurrentModificationException`.
-* **Distributed Cloud Performance (Issue #4012 | PR #4071):** Engineered a randomized compression delay for rolling log files to prevent simultaneous disk I/O spikes across distributed cloud nodes.
-* **Kafka Retry Handling Correctness (PR #4125):** Patched the retry logic in `KafkaAppender` to ensure transient failures successfully recovered by retries do not trigger false-alarm error notifications to the application error handler.
-* **DST & Scheduling Reliability (Issue #3660 | PR #4081):** Resolved CronExpression rollover corruption by implementing DST-safe time calculation logic for spring-forward and fallback boundaries.
-* **Ecosystem Modernization (Issue #3663 | PR #3951):** Led the migration of the Log4j ecosystem to Elasticsearch 9.x, ensuring compatibility with the latest Elastic Stack versions.
+### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Maintainer*
+* **Exception cycle detection** ([#4133](https://github.com/apache/logging-log4j2/pull/4133)) — identity-based tracking, safe with custom `equals`/`hashCode`.
+* **Resource leak fix** ([#4127](https://github.com/apache/logging-log4j2/pull/4127)) — closed socket and file-handle leaks in `ConfigurationSource` error paths.
+* **Thread-safe `ListAppender`** ([#4111](https://github.com/apache/logging-log4j2/pull/4111)) — granular locking, no more `ConcurrentModificationException`.
+* **Randomized rollover compression** ([#4071](https://github.com/apache/logging-log4j2/pull/4071)) — avoids I/O spikes across cluster nodes.
+* **Kafka appender retries** ([#4125](https://github.com/apache/logging-log4j2/pull/4125)) — recovered failures no longer raise false errors.
+* **DST-safe `CronExpression`** ([#4081](https://github.com/apache/logging-log4j2/pull/4081)) — correct scheduling across clock changes.
+* **Elasticsearch 9.x** ([#3951](https://github.com/apache/logging-log4j2/pull/3951)) — migrated the ecosystem to the latest Elastic Stack.
 
-### [Canonical](https://github.com/canonical) — *Recognized Contributor*
-* **FIPS Security Integration (openssl-fips-java #101):** Developed a FIPS-compliant native layer to translate Java Key objects to OpenSSL 3.x EVP instances using the OpenSSL 3.x `OSSL_DECODER` API.
-* **Automated Maven CLI Mapping (devpack-for-spring-cli #78):** Modified `MavenRunner` to automatically convert simple goal names to Maven's full plugin coordinate format, allowing execution of CLI goals without requiring static plugin declarations in `pom.xml`.
-* **Native Interop Proposal:** Authored a technical proposal and POC to migrate native library interop from legacy JNI to the modern Java FFM (Foreign Function & Memory) API.
+### [Canonical](https://github.com/canonical) — *Contributor*
+* **FIPS native layer** (openssl-fips-java #101) — Java `Key` → OpenSSL 3.x `EVP` via `OSSL_DECODER`.
+* **Maven goal mapping** (devpack-for-spring-cli #78) — run plugin goals without declaring them in `pom.xml`.
+* **JNI → FFM proposal** — POC moving native interop to the Java Foreign Function & Memory API.
 
-### [JReleaser](https://github.com/jreleaser/jreleaser) — *Recognized Contributor*
-* **Pipeline Security (Issue #1930 | Merged PR #1940):** Hardened the release workflow by implementing automated GPG signing-key expiry validation, converting key expiration warnings into blocking exceptions.
-* **Deployment Transparency (Issue #1650 | Merged PR #1954):** Improved staging workflows in Nexus2 by implementing secondary network lookups to log the `stagedRepositoryURI` immediately upon creation.
+### [JReleaser](https://github.com/jreleaser/jreleaser) — *Contributor*
+* **GPG key expiry check** ([#1940](https://github.com/jreleaser/jreleaser/pull/1940)) — expired signing keys now fail the release.
+* **Nexus2 staging URI** ([#1954](https://github.com/jreleaser/jreleaser/pull/1954)) — logs `stagedRepositoryURI` as soon as it's created.
 
-### [AWS Lambda](https://github.com/aws/aws-lambda-java-libs) & [Spring Kafka](https://github.com/spring-projects/spring-kafka) — *Contributor*
-* **Serverless Messaging Tools (AWS Lambda #606):** Developed a session-like `WebSocketConnectionContext` helper for API Gateway events, providing a lightweight, Lambda-safe object for managing WebSocket metadata.
-* **Observability Tools (Spring Kafka #2049):** Designed and implemented a `ProducerInterceptor` to enable granular logging of serialized Kafka messages.
-* **Advanced Messaging Patterns (Spring Kafka #2247):** Engineered architectural patterns for implementing scheduled and deferred delivery logic inside active Kafka brokers.
-
----
-
-## 💼 Professional Experience
-
-### **Senior Full Stack Developer** | *INTEMO*
-*July 2023 – Present | Chennai, TN*
-* **Cloud-Native Deployment:** Implemented and managed Kubernetes (K8s) clusters on AWS. Established automated CI/CD pipelines deploying directly from AWS ECR, and utilized PV/PVC structures for stateful database storage requirements.
-* **High-Availability Networking:** Orchestrated secure Layer 4 (Network Load Balancers) and Layer 7 (Application Load Balancers) strategies on AWS to manage traffic load spikes and route API transactions safely.
-* **Enterprise Monitoring:** Structured centralized logging topologies utilizing Fluentd metrics collections to stream container node and ingress load records.
-* **Distributed Automation Platform:** Architected an end-to-end automation engine for API-less ERP systems, handling 10,000+ daily transactions and reducing manual processing effort by ~60%.
-* **JVM Runtime Manipulation:** Developed a custom Java Agent using Byte Buddy for runtime bytecode manipulation to extract non-editable values from restricted JVM classes.
-* **High-Volume Virtualization:** Engineered a scalable automation engine using Docker and Xvfb to manage 8 concurrent virtual displays per node, achieving a 3x increase in processing throughput.
-* **Network Packet Analysis:** Built Python-based listeners and mitmproxy scripts to intercept and analyze browser-based ERP network traffic for automated response handling and protocol reverse engineering.
-
-### **Full Stack Developer** | *GTECHWEBSOLUTIONS*
-*April 2022 – June 2023 | Chennai, TN*
-* **Food Delivery Live Tracking:** Engineered a high-performance tracking system using Java 8, WebSockets, and Google Maps API, enabling real-time driver movement updates for 45-minute delivery windows.
-* **ERP & HRMS Development:** Built a custom ERP platform featuring complex Leave Approval Workflows and HRA calculation engines using Spring Boot and React.js, styled with Tailwind CSS.
-* **Biometric Attendance Interfacing:** Developed a Fingerprint API bridge to sync biometric hardware data with internal HRMS records, implementing real-time attendance tracking and automated payroll adjustments.
-* **Timesheet & Resource Planning:** Designed a high-granularity Timesheet Management Module with custom reporting views to track developer productivity and project-specific resource allocation.
-
-### **Senior Software Engineer** | *WEDDINGWISHLIST*
-*January 2022 – April 2022 | Chennai, TN*
-* **Platform Modernization:** Led the migration of a legacy multisite to a modern React/Node.js stack, resulting in a 40% improvement in page performance and sub-second navigation.
-
-### **Junior Developer** | *GEGOSOFT*
-*March 2019 – January 2022 | Madurai, TN*
-* **Blockchain & Bitcoin MLM Platform:** Engineered a complex Bitcoin-based Multi-Level Marketing (MLM) engine using Node.js. Developed recursive binary and matrix referral algorithms for automated, immutable commission payouts.
-* **Decentralized Exchange (DEX):** Designed and implemented a decentralized exchange interface inspired by Uniswap, utilizing Web3.js for secure wallet integration and automated liquidity pool interaction.
-* **Automated Scheduling Algorithm:** Built a custom automated timetable generation algorithm (KG to 12th) using a backtracking approach and integrated Meilisearch for sub-second record retrieval.
-
----
-
-## 🎓 Education
-* **Master of Computer Applications (MCA)** | Guru Nanak College, Chennai (Chennai, India)
-* **B.Sc. in Information Technology** | NMS SVN College, Madurai (Madurai, India)
+### [AWS Lambda Java](https://github.com/aws/aws-lambda-java-libs) & [Spring Kafka](https://github.com/spring-projects/spring-kafka) — *Contributor*
+* **WebSocket context helper** (aws-lambda-java-libs #606) — lightweight metadata access for API Gateway events.
+* **Producer logging interceptor** (spring-kafka #2049) — logs serialized Kafka records.
+* **Deferred delivery patterns** (spring-kafka #2247) — scheduled message delivery on Kafka.

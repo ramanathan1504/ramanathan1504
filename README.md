@@ -18,7 +18,6 @@ I build reliable, concurrent JVM backends and contribute to the open-source libr
 | | |
 | :--- | :--- |
 | **Core** | Java, JVM internals, concurrency & thread-safety |
-| **Frameworks** | Spring Boot, Spring Security, Spring Cloud, Spring Data JPA |
 | **Data & Messaging** | Apache Kafka, PostgreSQL, Redis |
 | **Platform** | Docker, Kubernetes, AWS, CI/CD, Linux |
 
@@ -26,14 +25,16 @@ I build reliable, concurrent JVM backends and contribute to the open-source libr
 
 ## 🌟 Open Source
 
-### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Maintainer*
-* **Exception cycle detection** ([#4133](https://github.com/apache/logging-log4j2/pull/4133)) — identity-based tracking, safe with custom `equals`/`hashCode`.
-* **Resource leak fix** ([#4127](https://github.com/apache/logging-log4j2/pull/4127)) — closed socket and file-handle leaks in `ConfigurationSource` error paths.
-* **Thread-safe `ListAppender`** ([#4111](https://github.com/apache/logging-log4j2/pull/4111)) — granular locking, no more `ConcurrentModificationException`.
-* **Randomized rollover compression** ([#4071](https://github.com/apache/logging-log4j2/pull/4071)) — avoids I/O spikes across cluster nodes.
-* **Kafka appender retries** ([#4125](https://github.com/apache/logging-log4j2/pull/4125)) — recovered failures no longer raise false errors.
-* **DST-safe `CronExpression`** ([#4081](https://github.com/apache/logging-log4j2/pull/4081)) — correct scheduling across clock changes.
-* **Elasticsearch 9.x** ([#3951](https://github.com/apache/logging-log4j2/pull/3951)) — migrated the ecosystem to the latest Elastic Stack.
+### [Apache Log4j](https://github.com/apache/logging-log4j2) — *Committer* · [38 merged PRs](https://github.com/apache/logging-log4j2/pulls?q=is%3Apr+author%3Aramanathan1504+is%3Amerged)
+* **Native W3C tracing in `LogEvent`** ([#4171](https://github.com/apache/logging-log4j2/pull/4171)) — `TraceContextProvider` SPI for `traceId`/`spanId`, removing async MDC map-cloning overhead.
+* **Properties config filter fix** ([#4116](https://github.com/apache/logging-log4j2/pull/4116)) — correct `onMatch`/`onMismatch` handling and a modernized component-builder API.
+* **MDC filtering in JSON Template Layout** ([#4186](https://github.com/apache/logging-log4j2/pull/4186)) — allow/deny key filters; ECS fields can no longer be overwritten by MDC.
+* **Max compression delay for rollover** ([#4071](https://github.com/apache/logging-log4j2/pull/4071)) — spreads compression I/O across nodes.
+* **Web context isolation** ([#4070](https://github.com/apache/logging-log4j2/pull/4070)) — separated `ServletContext` storage from the legacy external context to avoid Spring Boot collisions.
+* **Thread-safe `ListAppender`** ([#4111](https://github.com/apache/logging-log4j2/pull/4111)) — rewritten for concurrent tests.
+* **Stack traces for broken exception identity** ([#4133](https://github.com/apache/logging-log4j2/pull/4133)) — correct rendering when `equals`/`hashCode` are overridden.
+* **Disruptor `LinkageError` diagnostics** ([#4124](https://github.com/apache/logging-log4j2/pull/4124)) — clear errors for incompatible LMAX Disruptor versions.
+* **Elasticsearch 9.x** ([#3951](https://github.com/apache/logging-log4j2/pull/3951)) — upgraded `elasticsearch-java`.
 
 ### [Canonical](https://github.com/canonical) — *Contributor*
 * **FIPS native layer** (openssl-fips-java #101) — Java `Key` → OpenSSL 3.x `EVP` via `OSSL_DECODER`.

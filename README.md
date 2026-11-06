@@ -18,9 +18,14 @@ I maintain the logging library that a large share of the Java ecosystem runs on,
 
 <p align="left">
   <a href="https://github.com/apache/logging-log4j2/pulls?q=is%3Apr+author%3Aramanathan1504+is%3Amerged"><img src="https://img.shields.io/github/issues-search/apache/logging-log4j2?query=is%3Apr%20author%3Aramanathan1504%20is%3Amerged&label=merged%20PRs&style=flat-square&color=2ea44f" alt="Merged PRs"></a>
+  <a href="https://github.com/apache/logging-log4j2/commits/2.x/?author=ramanathan1504"><img src="https://img.shields.io/github/commit-activity/t/apache/logging-log4j2/2.x?authorFilter=ramanathan1504&label=2.x%20commits&style=flat-square&color=fb8c00" alt="Commits on 2.x"></a>
   <a href="https://github.com/apache/logging-log4j2/pulls?q=is%3Apr+reviewed-by%3Aramanathan1504"><img src="https://img.shields.io/github/issues-search/apache/logging-log4j2?query=is%3Apr%20reviewed-by%3Aramanathan1504&label=PRs%20reviewed&style=flat-square&color=0969da" alt="PRs reviewed"></a>
+  <a href="https://github.com/apache/logging-log4j2/issues?q=author%3Aramanathan1504"><img src="https://img.shields.io/github/issues-search/apache/logging-log4j2?query=author%3Aramanathan1504&label=issues%20%2B%20PRs%20opened&style=flat-square&color=6e7781" alt="Issues and PRs opened"></a>
   <img src="https://img.shields.io/badge/releases%20managed-2.26.1%20·%202.25.5-8250df?style=flat-square" alt="Releases managed">
+  <a href="https://insights.linuxfoundation.org/project/apache-logging-log4j2"><img src="https://img.shields.io/badge/LFX%20Insights-Log4j%20activity-003366?style=flat-square&logo=linuxfoundation&logoColor=white" alt="LFX Insights"></a>
 </p>
+
+📊 **Most active Log4j contributor right now**: about **50%** of all project activity over the last 3 months and **40%** over the last 6 months, per [LFX Insights](https://insights.linuxfoundation.org/project/apache-logging-log4j2).
 
 - 🚀 **Release manager**: shipped [2.26.1](https://github.com/apache/logging-log4j2/releases/tag/rel%2F2.26.1) and [2.25.5](https://github.com/apache/logging-log4j2/releases/tag/rel%2F2.25.5) to Maven Central in the same week. 2.26.1 unblocked Apache Spark's upgrade.
 - 🛡️ **Security team**: member of the Apache Logging Services security team (`security@logging.apache.org`), working on vulnerability triage.

@@ -1,6 +1,6 @@
 <h1 align="left">Hi, I'm Ramanathan Muthu 👋</h1>
 
-<h3 align="left"> Apache Log4j Committer </h3>
+<h3 align="left">Infrastructure Architect · Apache Log4j Committer · Performance Engineer</h3>
 
 I maintain the logging library that a large share of the Java ecosystem runs on, and I work on making JVM backends fast, concurrent and reliable.
 
@@ -36,9 +36,7 @@ I maintain the logging library that a large share of the Java ecosystem runs on,
 
 ## 📈 Contributions
 
-<p align="left">
-  <a href="https://github.com/ramanathan1504"><img src="https://ghchart.rshah.org/40c463/ramanathan1504" alt="Ramanathan's GitHub contribution graph" width="100%"></a>
-</p>
+<a href="https://github.com/ramanathan1504"><img src="assets/contrib-card.svg" alt="GitHub contributions and activity overview" width="100%"></a>
 
 ---
 

@@ -34,12 +34,6 @@ I maintain the logging library that a large share of the Java ecosystem runs on,
 
 ---
 
-## 📈 Contributions
-
-<a href="https://github.com/ramanathan1504"><img src="assets/contrib-card.svg" alt="GitHub contributions and activity overview" width="100%"></a>
-
----
-
 <p align="left">
   💖 If Log4j keeps your services running, consider <a href="https://github.com/sponsors/ramanathan1504"><b>sponsoring my open source work</b></a>.
 </p>

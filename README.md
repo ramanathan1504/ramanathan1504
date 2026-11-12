@@ -1,6 +1,6 @@
 <h1 align="left">Hi, I'm Ramanathan Muthu 👋</h1>
 
-<h3 align="left"> Apache Log4j Committer · Performance Engineer · Platform Engineer </h3>
+<h3 align="left"> Apache Log4j Committer · Infrastructure & Performance Engineer · Platform Engineer </h3>
 
 I maintain the logging library that a large share of the Java ecosystem runs on, and I work on making JVM backends fast, concurrent and reliable.
 

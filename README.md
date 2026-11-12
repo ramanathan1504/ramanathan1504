@@ -1,6 +1,6 @@
 <h1 align="left">Hi, I'm Ramanathan Muthu 👋</h1>
 
-<h3 align="left">Infrastructure Architect · Apache Log4j Committer · Performance Engineer</h3>
+<h3 align="left"> Apache Log4j Committer </h3>
 
 I maintain the logging library that a large share of the Java ecosystem runs on, and I work on making JVM backends fast, concurrent and reliable.
 
@@ -26,8 +26,11 @@ I maintain the logging library that a large share of the Java ecosystem runs on,
   <a href="https://insights.linuxfoundation.org/project/apache-logging-log4j2/contributors"><img src="https://img.shields.io/badge/LFX%20Insights-Log4j%20activity-003366?style=flat-square&logo=linuxfoundation&logoColor=white" alt="LFX Insights"></a>
 </p>
 
+📊 **Most active Log4j contributor right now**: about **50%** of all project activity over the last 3 months and **40%** over the last 6 months, per [LFX Insights](https://insights.linuxfoundation.org/project/apache-logging-log4j2).
+
 - 🚀 **Release manager**: shipped [2.26.1](https://github.com/apache/logging-log4j2/releases/tag/rel%2F2.26.1) and [2.25.5](https://github.com/apache/logging-log4j2/releases/tag/rel%2F2.25.5) to Maven Central in the same week. 2.26.1 unblocked Apache Spark's upgrade.
 - 🛡️ **Security team**: member of the Apache Logging Services security team (`security@logging.apache.org`), working on vulnerability triage.
+- 🔍 **Reviewer**: 100+ pull requests reviewed, most of them from other contributors.
 
 ---
 
@@ -36,18 +39,6 @@ I maintain the logging library that a large share of the Java ecosystem runs on,
 <p align="left">
   <a href="https://github.com/ramanathan1504"><img src="https://ghchart.rshah.org/40c463/ramanathan1504" alt="Ramanathan's GitHub contribution graph" width="100%"></a>
 </p>
-
----
-
-## 🛠️ What I work with
-
-| | |
-| :--- | :--- |
-| **Core** | Java 21, JVM internals, GC & memory, concurrency, lock-free structures (LMAX Disruptor) |
-| **Performance** | JMH, JProfiler, async logging, allocation & latency tuning |
-| **Data & Messaging** | Apache Kafka, PostgreSQL, Redis, Debezium CDC |
-| **Platform** | Docker, Kubernetes, AWS, CI/CD, Maven/Gradle, Linux |
-| **Observability** | Log4j, W3C Trace Context, OpenTelemetry, Micrometer, ECS / JSON logging |
 
 ---
 

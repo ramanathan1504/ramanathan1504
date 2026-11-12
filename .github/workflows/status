@@ -1,0 +1,37 @@
+name: Update Log4j stats badges
+on:
+  schedule:
+    - cron: "47 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count commits and releases in apache/logging-log4j2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          badge() { printf '{"schemaVersion":1,"label":"%s","message":"%s","color":"%s"}\n' "$2" "$3" "$4" > "stats/$1.json"; }
+          mkdir -p stats
+          git clone -q --filter=blob:none --no-checkout https://github.com/apache/logging-log4j2.git /tmp/l4j
+          L="git -C /tmp/l4j log origin/2.x origin/main"
+          AUTHORED=$($L --no-merges -i --author='ramanathan' --format=%H | sort -u | wc -l | tr -d ' ')
+          COAUTHORED=$($L -i --grep='co-authored-by:.*ramanathan' --format='%H|%an' | grep -vi '|ramanathan' | sort -u | wc -l | tr -d ' ')
+          RELEASES=$(gh api --paginate repos/apache/logging-log4j2/releases \
+            --jq '.[] | select(.author.login=="ramanathan1504") | .tag_name | sub("^rel/"; "")' | paste -sd ',' - | sed 's/,/ · /g')
+          if [ -z "$RELEASES" ]; then RCOUNT=0; else RCOUNT=$(echo "$RELEASES" | awk -F' · ' '{print NF}'); fi
+          badge authored     "commits authored"    "$AUTHORED"   "fb8c00"
+          badge coauthored   "co-authored commits" "$COAUTHORED" "e3b341"
+          badge releases     "releases managed"    "${RCOUNT} (${RELEASES})" "8250df"
+          cat stats/*.json
+      - name: Commit if changed
+        run: |
+          git add stats
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Log4j stats badges"
+          git push

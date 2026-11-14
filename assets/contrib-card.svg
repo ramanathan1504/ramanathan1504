@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="902" height="545" viewBox="-1 -1 902 545" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif"><rect x="-1" y="-1" width="902" height="545" fill="#212830"/><rect x="0" y="36" width="900" height="507" rx="6" fill="none" stroke="#3d444d"/><text x="0" y="22" font-size="16" fill="#d1d7e0" text-anchor="start" font-weight="400">1,687 contributions in the last year</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="902" height="545" viewBox="-1 -1 902 545" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif"><rect x="-1" y="-1" width="902" height="545" fill="#212830"/><rect x="0" y="36" width="900" height="507" rx="6" fill="none" stroke="#3d444d"/><text x="0" y="22" font-size="16" fill="#d1d7e0" text-anchor="start" font-weight="400">1,691 contributions in the last year</text>
 <rect x="48" y="76" width="12" height="12" rx="2" fill="#2a313c"/>
 <rect x="48" y="91" width="12" height="12" rx="2" fill="#2a313c"/>
 <rect x="48" y="106" width="12" height="12" rx="2" fill="#1b4721"/>
@@ -376,13 +376,13 @@
 <rect x="813" y="151" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="813" y="166" width="12" height="12" rx="2" fill="#1b4721"/>
 <text x="813" y="68" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Nov</text>
-<rect x="828" y="76" width="12" height="12" rx="2" fill="#1b4721"/>
+<rect x="828" y="76" width="12" height="12" rx="2" fill="#2a313c"/>
 <rect x="828" y="91" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="828" y="106" width="12" height="12" rx="2" fill="#2a313c"/>
 <rect x="828" y="121" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="828" y="136" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="828" y="151" width="12" height="12" rx="2" fill="#2a313c"/>
-<rect x="828" y="166" width="12" height="12" rx="2" fill="#2a313c"/>
+<rect x="828" y="166" width="12" height="12" rx="2" fill="#1b4721"/>
 <text x="16" y="100" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Mon</text>
 <text x="16" y="130" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Wed</text>
 <text x="16" y="160" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Fri</text>

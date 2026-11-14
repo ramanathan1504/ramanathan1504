@@ -382,6 +382,7 @@
 <rect x="828" y="121" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="828" y="136" width="12" height="12" rx="2" fill="#1b4721"/>
 <rect x="828" y="151" width="12" height="12" rx="2" fill="#2a313c"/>
+<rect x="828" y="166" width="12" height="12" rx="2" fill="#2a313c"/>
 <text x="16" y="100" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Mon</text>
 <text x="16" y="130" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Wed</text>
 <text x="16" y="160" font-size="12" fill="#d1d7e0" text-anchor="start" font-weight="400">Fri</text>

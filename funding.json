@@ -5,7 +5,7 @@
     "role": "maintainer",
     "name": "Ramanathan Muthu",
     "email": "ramanathan@apache.org",
-    "description": "Apache Committer and Security Team member for Apache Logging Services (Log4j), working on release management, bug fixes and feature development for Apache Log4j2 and related Logging Services repositories. Contributor to Canonical's OpenSSL FIPS Java provider and Devpack for Spring CLI, Micrometer Tracing, JReleaser, Spring Boot, Spring for Apache Kafka, Apache Spark, AWS Lambda Java libraries, LFX Insights and OpenSSL. Java core libraries engineer based in Madurai, India.",
+    "description": "Apache Committer and Security Team member for Apache Logging Services. Release coordinator and maintainer of the Log4j 2.x line, working on the upcoming Log4j 3.x release. Java core libraries and performance engineer focused on benchmarking, security triage and long-term maintenance of logging infrastructure. Based in Madurai, India.",
     "webpageUrl": {
       "url": "https://github.com/ramanathan1504"
     }
@@ -21,47 +21,16 @@
       "repositoryUrl": {
         "url": "https://github.com/apache/logging-log4j2"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "logging", "observability", "security", "apache"]
-    },
-    {
-      "guid": "openssl-fips-java",
-      "name": "OpenSSL FIPS Java",
-      "description": "A Java security provider based on FIPS-compliant OpenSSL (Canonical). Contributor.",
-      "webpageUrl": {
-        "url": "https://github.com/canonical/openssl-fips-java"
-      },
-      "repositoryUrl": {
-        "url": "https://github.com/canonical/openssl-fips-java"
-      },
-      "licenses": ["spdx:GPL-3.0"],
-      "tags": ["java", "security", "cryptography", "fips", "openssl"]
-    },
-    {
-      "guid": "devpack-for-spring-cli",
-      "name": "Devpack for Spring CLI",
-      "description": "Devpack for Spring command line interface application (Canonical). Contributor.",
-      "webpageUrl": {
-        "url": "https://github.com/canonical/devpack-for-spring-cli"
-      },
-      "repositoryUrl": {
-        "url": "https://github.com/canonical/devpack-for-spring-cli"
-      },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "spring", "cli", "developer-tools"]
-    },
-    {
-      "guid": "micrometer-tracing",
-      "name": "Micrometer Tracing",
-      "description": "Distributed tracing facade for JVM applications. Contributor.",
-      "webpageUrl": {
-        "url": "https://github.com/micrometer-metrics/tracing"
-      },
-      "repositoryUrl": {
-        "url": "https://github.com/micrometer-metrics/tracing"
-      },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "tracing", "observability"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "logging",
+        "observability",
+        "security",
+        "apache"
+      ]
     },
     {
       "guid": "jreleaser",
@@ -73,8 +42,75 @@
       "repositoryUrl": {
         "url": "https://github.com/jreleaser/jreleaser"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "release-automation", "developer-tools"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "release-automation",
+        "developer-tools"
+      ]
+    },
+    {
+      "guid": "openssl-fips-java",
+      "name": "OpenSSL FIPS Java",
+      "description": "A Java security provider based on FIPS-compliant OpenSSL (Canonical). Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/canonical/openssl-fips-java"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/canonical/openssl-fips-java"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "java",
+        "security",
+        "cryptography",
+        "fips",
+        "openssl"
+      ]
+    },
+    {
+      "guid": "devpack-for-spring",
+      "name": "Devpack for Spring",
+      "description": "Development tools for Spring projects, packaged as a snap for Ubuntu (Canonical). Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring"
+      },
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "spring",
+        "developer-tools",
+        "ubuntu"
+      ]
+    },
+    {
+      "guid": "devpack-for-spring-cli",
+      "name": "Devpack for Spring CLI",
+      "description": "Devpack for Spring command line interface application (Canonical). Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring-cli"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring-cli"
+      },
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "spring",
+        "cli",
+        "developer-tools"
+      ]
     },
     {
       "guid": "spring-boot",
@@ -86,8 +122,14 @@
       "repositoryUrl": {
         "url": "https://github.com/spring-projects/spring-boot"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "spring", "framework"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "spring",
+        "framework"
+      ]
     },
     {
       "guid": "spring-kafka",
@@ -99,21 +141,34 @@
       "repositoryUrl": {
         "url": "https://github.com/spring-projects/spring-kafka"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "spring", "kafka", "messaging"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "spring",
+        "kafka",
+        "messaging"
+      ]
     },
     {
-      "guid": "apache-spark",
-      "name": "Apache Spark",
-      "description": "Unified analytics engine for large-scale data processing. Contributor.",
+      "guid": "micrometer-tracing",
+      "name": "Micrometer Tracing",
+      "description": "Distributed tracing facade for JVM applications. Contributor.",
       "webpageUrl": {
-        "url": "https://github.com/apache/spark"
+        "url": "https://github.com/micrometer-metrics/tracing"
       },
       "repositoryUrl": {
-        "url": "https://github.com/apache/spark"
+        "url": "https://github.com/micrometer-metrics/tracing"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["scala", "java", "big-data", "apache"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "tracing",
+        "observability"
+      ]
     },
     {
       "guid": "aws-lambda-java-libs",
@@ -125,8 +180,14 @@
       "repositoryUrl": {
         "url": "https://github.com/aws/aws-lambda-java-libs"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["java", "aws", "serverless"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "java",
+        "aws",
+        "serverless"
+      ]
     },
     {
       "guid": "lfx-insights",
@@ -138,8 +199,14 @@
       "repositoryUrl": {
         "url": "https://github.com/linuxfoundation/insights"
       },
-      "licenses": ["spdx:MIT"],
-      "tags": ["open-source", "analytics", "linux-foundation"]
+      "licenses": [
+        "spdx:MIT"
+      ],
+      "tags": [
+        "open-source",
+        "analytics",
+        "linux-foundation"
+      ]
     },
     {
       "guid": "openssl",
@@ -151,8 +218,15 @@
       "repositoryUrl": {
         "url": "https://github.com/openssl/openssl"
       },
-      "licenses": ["spdx:Apache-2.0"],
-      "tags": ["c", "security", "cryptography", "tls"]
+      "licenses": [
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "c-language",
+        "security",
+        "cryptography",
+        "tls"
+      ]
     }
   ],
   "funding": {
@@ -173,7 +247,9 @@
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",
-        "channels": ["github-sponsors"]
+        "channels": [
+          "github-sponsors"
+        ]
       },
       {
         "guid": "one-time-support",
@@ -183,7 +259,9 @@
         "amount": 0,
         "currency": "USD",
         "frequency": "one-time",
-        "channels": ["github-sponsors"]
+        "channels": [
+          "github-sponsors"
+        ]
       }
     ],
     "history": []

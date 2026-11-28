@@ -5,37 +5,154 @@
     "role": "maintainer",
     "name": "Ramanathan Muthu",
     "email": "ramanathan@apache.org",
-    "description": "Apache Committer and Security Team member for Apache Logging Services (Log4j). Java core libraries engineer and open source contributor based in Madurai, India.",
+    "description": "Apache Committer and Security Team member for Apache Logging Services (Log4j), working on release management, bug fixes and feature development for Apache Log4j2 and related Logging Services repositories. Contributor to Canonical's OpenSSL FIPS Java provider and Devpack for Spring CLI, Micrometer Tracing, JReleaser, Spring Boot, Spring for Apache Kafka, Apache Spark, AWS Lambda Java libraries, LFX Insights and OpenSSL. Java core libraries engineer based in Madurai, India.",
     "webpageUrl": {
       "url": "https://github.com/ramanathan1504"
     }
   },
   "projects": [
     {
-      "guid": "oss-cli",
-      "name": "oss-cli",
-      "description": "Offline-first prompt intelligence workbench for open-source maintainers.",
+      "guid": "apache-log4j2",
+      "name": "Apache Log4j2",
+      "description": "Versatile, industrial-grade Java logging API and implementation. Committer and Security Team member: release management, bug fixes and feature development.",
       "webpageUrl": {
-        "url": "https://github.com/ramanathan1504/oss-cli"
+        "url": "https://github.com/apache/logging-log4j2"
       },
       "repositoryUrl": {
-        "url": "https://github.com/ramanathan1504/oss-cli"
+        "url": "https://github.com/apache/logging-log4j2"
       },
       "licenses": ["spdx:Apache-2.0"],
-      "tags": ["developer-tools", "cli", "open-source", "productivity"]
+      "tags": ["java", "logging", "observability", "security", "apache"]
     },
     {
-      "guid": "knowledge-creator",
-      "name": "knowledge-creator",
-      "description": "Deterministic knowledge harvester that turns your work into a searchable Markdown archive.",
+      "guid": "openssl-fips-java",
+      "name": "OpenSSL FIPS Java",
+      "description": "A Java security provider based on FIPS-compliant OpenSSL (Canonical). Contributor.",
       "webpageUrl": {
-        "url": "https://github.com/ramanathan1504/knowledge-creator"
+        "url": "https://github.com/canonical/openssl-fips-java"
       },
       "repositoryUrl": {
-        "url": "https://github.com/ramanathan1504/knowledge-creator"
+        "url": "https://github.com/canonical/openssl-fips-java"
+      },
+      "licenses": ["spdx:GPL-3.0"],
+      "tags": ["java", "security", "cryptography", "fips", "openssl"]
+    },
+    {
+      "guid": "devpack-for-spring-cli",
+      "name": "Devpack for Spring CLI",
+      "description": "Devpack for Spring command line interface application (Canonical). Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring-cli"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/canonical/devpack-for-spring-cli"
       },
       "licenses": ["spdx:Apache-2.0"],
-      "tags": ["developer-tools", "knowledge-management", "markdown", "productivity"]
+      "tags": ["java", "spring", "cli", "developer-tools"]
+    },
+    {
+      "guid": "micrometer-tracing",
+      "name": "Micrometer Tracing",
+      "description": "Distributed tracing facade for JVM applications. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/micrometer-metrics/tracing"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/micrometer-metrics/tracing"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["java", "tracing", "observability"]
+    },
+    {
+      "guid": "jreleaser",
+      "name": "JReleaser",
+      "description": "Release automation tool for Java and other projects. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/jreleaser/jreleaser"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/jreleaser/jreleaser"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["java", "release-automation", "developer-tools"]
+    },
+    {
+      "guid": "spring-boot",
+      "name": "Spring Boot",
+      "description": "Opinionated framework for building production-ready Spring applications. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/spring-projects/spring-boot"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/spring-projects/spring-boot"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["java", "spring", "framework"]
+    },
+    {
+      "guid": "spring-kafka",
+      "name": "Spring for Apache Kafka",
+      "description": "Spring integration for Apache Kafka. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/spring-projects/spring-kafka"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/spring-projects/spring-kafka"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["java", "spring", "kafka", "messaging"]
+    },
+    {
+      "guid": "apache-spark",
+      "name": "Apache Spark",
+      "description": "Unified analytics engine for large-scale data processing. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/apache/spark"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/apache/spark"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["scala", "java", "big-data", "apache"]
+    },
+    {
+      "guid": "aws-lambda-java-libs",
+      "name": "AWS Lambda Java Libraries",
+      "description": "Official libraries for running Java on AWS Lambda. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/aws/aws-lambda-java-libs"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/aws/aws-lambda-java-libs"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["java", "aws", "serverless"]
+    },
+    {
+      "guid": "lfx-insights",
+      "name": "LFX Insights",
+      "description": "Linux Foundation platform providing insights into critical open source software. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/linuxfoundation/insights"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/linuxfoundation/insights"
+      },
+      "licenses": ["spdx:MIT"],
+      "tags": ["open-source", "analytics", "linux-foundation"]
+    },
+    {
+      "guid": "openssl",
+      "name": "OpenSSL",
+      "description": "TLS/SSL and general-purpose cryptography library. Contributor.",
+      "webpageUrl": {
+        "url": "https://github.com/openssl/openssl"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/openssl/openssl"
+      },
+      "licenses": ["spdx:Apache-2.0"],
+      "tags": ["c", "security", "cryptography", "tls"]
     }
   ],
   "funding": {
